@@ -5,6 +5,7 @@
 
 #include "3rdparty/qv2ray/v2/ui/QvAutoCompleteTextEdit.hpp"
 #include "main/NekoGui.hpp"
+#include "widget/RouteItem.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -23,11 +24,19 @@ public:
 private:
     Ui::DialogManageRoutes *ui;
 
+    RouteItem* routeChainWidget;
+
     void reloadProfileItems();
 
-    QList<QString> currentRouteProfiles;
+    QList<std::shared_ptr<NekoGui::RoutingChain>> chainList;
+
+    int currentRouteProfileID = -1;
+
+    QShortcut* deleteShortcut;
 public slots:
     void accept() override;
+
+    void updateCurrentRouteProfile(int idx);
 
     void on_new_route_clicked();
 

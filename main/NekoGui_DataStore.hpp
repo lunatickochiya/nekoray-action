@@ -8,11 +8,10 @@ namespace NekoGui {
         QString def_outbound = "proxy";
 
         // DNS
-        QString remote_dns = "https://8.8.8.8/dns-query";
+        QString remote_dns = "8.8.8.8";
         QString remote_dns_strategy = "";
         QString direct_dns = "localhost";
         QString direct_dns_strategy = "";
-        bool dns_routing = true;
         bool use_dns_object = false;
         QString dns_object = "";
         QString dns_final_out = "proxy";
@@ -25,8 +24,6 @@ namespace NekoGui {
         explicit Routing(int preset = 0);
 
         static QStringList List();
-
-        static bool SetToActive(const QString &name);
     };
 
     class ExtraCore : public JsonStore {
@@ -102,7 +99,7 @@ namespace NekoGui {
         QString v2ray_asset_dir = "";
         int language = 0;
         QString mw_size = "";
-        bool check_include_pre = false;
+        bool check_include_pre = true;
         QString system_proxy_format = "";
         QStringList log_ignore = {};
         bool start_minimal = false;
@@ -118,7 +115,6 @@ namespace NekoGui {
 
         // Security
         bool skip_cert = false;
-        int enable_js_hook = 0;
         QString utlsFingerprint = "";
 
         // Remember
@@ -145,9 +141,6 @@ namespace NekoGui {
         bool vpn_ipv6 = false;
         bool vpn_hide_console = true;
         bool vpn_strict_route = false;
-        bool vpn_rule_white = false;
-        QString vpn_rule_process = "";
-        QString vpn_rule_cidr = "";
 
         // NTP
         bool enable_ntp = false;
@@ -164,6 +157,7 @@ namespace NekoGui {
 
         // Core
         int core_box_clash_api = -9090;
+        QString core_box_clash_listen_addr = "127.0.0.1";
         QString core_box_clash_api_secret = "";
         QString core_box_underlying_dns = "";
         bool core_ray_direct_dns = false;
@@ -179,7 +173,7 @@ namespace NekoGui {
 
         void UpdateStartedId(int id);
 
-        QString GetUserAgent(bool isDefault = false) const;
+        [[nodiscard]] QString GetUserAgent(bool isDefault = false) const;
     };
 
     extern DataStore *dataStore;

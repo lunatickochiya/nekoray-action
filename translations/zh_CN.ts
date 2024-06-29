@@ -44,10 +44,6 @@
         <translation>主题</translation>
     </message>
     <message>
-        <source>System</source>
-        <translation>系统</translation>
-    </message>
-    <message>
         <source>Subscription</source>
         <translation>订阅</translation>
     </message>
@@ -144,18 +140,6 @@
         <translation>取消</translation>
     </message>
     <message>
-        <source>Switch core</source>
-        <translation>切换核心</translation>
-    </message>
-    <message>
-        <source>Confirmation</source>
-        <translation>确认</translation>
-    </message>
-    <message>
-        <source>Switching the core to %1, click &quot;Yes&quot; to complete the switch and the program will restart. This feature may be unstable, please do not switch frequently.</source>
-        <translation>将核心切换到 %1。点击 &quot;是&quot; 完成切换，程序将重新启动。此功能可能不稳定，请不要频繁切换。</translation>
-    </message>
-    <message>
         <source>System proxy format</source>
         <translation>系统代理格式</translation>
     </message>
@@ -178,10 +162,6 @@
     <message>
         <source>Ignore TLS errors when updating subscription</source>
         <translation>更新订阅时忽略 TLS 错误</translation>
-    </message>
-    <message>
-        <source>Enable hook.js</source>
-        <translation>启用 hook.js 功能</translation>
     </message>
     <message>
         <source>Hide dashboard at startup</source>
@@ -228,10 +208,6 @@ For NekoBox, this rewrites the underlying(localhost) DNS in Tun Mode, normal mod
 对于 NekoBox 来说，在 Tun 模式、正常模式和 URL 测试中会重写 underlying(localhost) DNS。</translation>
     </message>
     <message>
-        <source>If you Tun Mode is not working, try to change this option.</source>
-        <translation>如果您的 Tun 模式有问题，请尝试更改此选项。</translation>
-    </message>
-    <message>
         <source>Default On</source>
         <translation>默认开启</translation>
     </message>
@@ -258,6 +234,50 @@ For NekoBox, this rewrites the underlying(localhost) DNS in Tun Mode, normal mod
     <message>
         <source>Interval (minute, invalid if less than 30)</source>
         <translation>时间间隔（分钟，少于 30 分钟无效）</translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Might Improve Ping and Performance&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Disable Traffic Stats</source>
+        <translation>禁用流量状态</translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Settings for the sing-box&apos;s built-in NTP client&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;sing-box 内置 NTP 客户端设置&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+    </message>
+    <message>
+        <source>NTP Settings</source>
+        <translation>NTP 设置</translation>
+    </message>
+    <message>
+        <source>server</source>
+        <translation>服务器</translation>
+    </message>
+    <message>
+        <source>Port</source>
+        <translation>端口</translation>
+    </message>
+    <message>
+        <source>sync interval</source>
+        <translation>同步间隔</translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;In minutes&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>5m</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>10m</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>30m</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -319,14 +339,6 @@ For NekoBox, this rewrites the underlying(localhost) DNS in Tun Mode, normal mod
         <translation>前置代理</translation>
     </message>
     <message>
-        <source>None</source>
-        <translation>无</translation>
-    </message>
-    <message>
-        <source>Clear</source>
-        <translation>清除</translation>
-    </message>
-    <message>
         <source>Skip automatic update</source>
         <translation>跳过自动更新</translation>
     </message>
@@ -337,6 +349,10 @@ For NekoBox, this rewrites the underlying(localhost) DNS in Tun Mode, normal mod
     <message>
         <source>Share</source>
         <translation>分享</translation>
+    </message>
+    <message>
+        <source>Landing Proxy</source>
+        <translation>落地代理</translation>
     </message>
 </context>
 <context>
@@ -486,27 +502,28 @@ For NekoBox, this rewrites the underlying(localhost) DNS in Tun Mode, normal mod
         <translation>需要服务器支持</translation>
     </message>
     <message>
-        <source>Reality short id. Accept only one value.</source>
-        <translation>Reality short id. 只接受一个值。</translation>
-    </message>
-</context>
-<context>
-    <name>DialogFirstSetup</name>
-    <message>
-        <source>First time setup</source>
-        <translation>首次设置</translation>
+        <source>httpupgrade</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>It looks like you are using this software for the first time, please select a core.
-
-These settings can be changed later.</source>
-        <translation>看来您是第一次使用该软件，请选择内核。
-
-这些设置可以稍后更改。</translation>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Overrides mux to On&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>Quit</source>
-        <translation>退出</translation>
+        <source>Enable TCP Brutal</source>
+        <translation>启用 TCP Brutal</translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Server to Client TCP Brutal Speed&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>TCP Brutal Speed</source>
+        <translation>TCP Brutal 速度</translation>
+    </message>
+    <message>
+        <source>Mb/s</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -528,8 +545,12 @@ These settings can be changed later.</source>
         <translation>显示/隐藏主窗口</translation>
     </message>
     <message>
-        <source>System Proxy</source>
-        <translation>系统代理</translation>
+        <source>Proxy mode</source>
+        <translation>代理模式</translation>
+    </message>
+    <message>
+        <source>Toggle System Proxy</source>
+        <translation>切换系统代理</translation>
     </message>
 </context>
 <context>
@@ -586,84 +607,8 @@ These settings can be changed later.</source>
         <translation>远程 DNS</translation>
     </message>
     <message>
-        <source>Enable DNS Routing</source>
-        <translation>启用 DNS 路由</translation>
-    </message>
-    <message>
-        <source>Block</source>
-        <translation>阻止</translation>
-    </message>
-    <message>
-        <source>Direct</source>
-        <translation>直连</translation>
-    </message>
-    <message>
-        <source>Domain</source>
-        <translation>域名</translation>
-    </message>
-    <message>
-        <source>Proxy</source>
-        <translation>代理</translation>
-    </message>
-    <message>
-        <source>Preset</source>
-        <translation>预设</translation>
-    </message>
-    <message>
-        <source>Bypass LAN and China</source>
-        <translation>绕过局域网和大陆</translation>
-    </message>
-    <message>
-        <source>Global</source>
-        <translation>全局</translation>
-    </message>
-    <message>
-        <source>IP</source>
-        <translation></translation>
-    </message>
-    <message>
-        <source>Save</source>
-        <translation>保存</translation>
-    </message>
-    <message>
-        <source>Load</source>
-        <translation>加载</translation>
-    </message>
-    <message>
-        <source>Cancel</source>
-        <translation>取消</translation>
-    </message>
-    <message>
-        <source>Remove</source>
-        <translation>删除</translation>
-    </message>
-    <message>
-        <source>Save routing: %1</source>
-        <translation>保存路由: %1</translation>
-    </message>
-    <message>
-        <source>Load routing: %1</source>
-        <translation>加载路由: %1</translation>
-    </message>
-    <message>
-        <source>Remove routing: %1</source>
-        <translation>删除路由: %1</translation>
-    </message>
-    <message>
-        <source>Mange route set</source>
-        <translation>管理路由规则</translation>
-    </message>
-    <message>
         <source>Default Outbound</source>
         <translation>默认出站</translation>
-    </message>
-    <message>
-        <source>Domain Strategy</source>
-        <translation>域名策略</translation>
-    </message>
-    <message>
-        <source>Server Address Strategy</source>
-        <translation>服务器地址策略</translation>
     </message>
     <message>
         <source>Common</source>
@@ -686,26 +631,6 @@ These settings can be changed later.</source>
         <translation>DNS Object 设置</translation>
     </message>
     <message>
-        <source>Simple Route</source>
-        <translation>简易路由</translation>
-    </message>
-    <message>
-        <source>Custom Route</source>
-        <translation>自定义路由</translation>
-    </message>
-    <message>
-        <source>Custom Route (global)</source>
-        <translation>自定义路由（全局）</translation>
-    </message>
-    <message>
-        <source>Note: Other settings are independent for each route set.</source>
-        <translation>注意：其他设置对于每个路由集都是独立的。</translation>
-    </message>
-    <message>
-        <source>Route sets</source>
-        <translation>路由集</translation>
-    </message>
-    <message>
         <source>Query Strategy</source>
         <translation>查询策略</translation>
     </message>
@@ -726,8 +651,58 @@ For more information, see the document &quot;Configuration/DNS&quot;.</source>
 更多信息，请参阅文档 &quot;配置/DNS&quot;。</translation>
     </message>
     <message>
-        <source>Final DNS Out</source>
-        <translation>默认 DNS 出站</translation>
+        <source>Sniffs the connections intial packet(s?) to identify the protocol and the SNI. Sniff result for destination also rewrites the destionation of the connection to the sniffed SNI. For more data on the sniffed protocol refer to the sing-box&apos;s documentation.</source>
+        <translation>嗅探连接的初始数据包以识别协议和 SNI。目标嗅探结果还会将连接的目标重写为嗅探到的 SNI。有关嗅探协议的更多数据，请参阅 sing-box 的文档。</translation>
+    </message>
+    <message>
+        <source>Routing Profile</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>direct</source>
+        <translation>直连</translation>
+    </message>
+    <message>
+        <source>The outbound tag to use when the request is not handled by any rule</source>
+        <translation>当请求未被任何规则处理时使用的出站标签</translation>
+    </message>
+    <message>
+        <source>Default DNS server</source>
+        <translation>默认 DNS 服务器</translation>
+    </message>
+    <message>
+        <source>Route</source>
+        <translation>路由</translation>
+    </message>
+    <message>
+        <source>Routing Profiles</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>New</source>
+        <translation>新的</translation>
+    </message>
+    <message>
+        <source>Edit</source>
+        <translation>编辑</translation>
+    </message>
+    <message>
+        <source>Delete</source>
+        <translation>删除</translation>
+    </message>
+    <message>
+        <source>outbound.domain_strategy
+when set, domain destinations are resolved to IP before connect,
+also if the connection cannot be established with the current address family (ipv4, ipv6), a fallback connection is created shortly after, with the other address family.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Outbound Domain Strategy</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Inbound Domain Strategy</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -743,30 +718,6 @@ For more information, see the document &quot;Configuration/DNS&quot;.</source>
     <message>
         <source>Tun Enable IPv6</source>
         <translation>启用 Tun IPv6</translation>
-    </message>
-    <message>
-        <source>Bypass CIDR</source>
-        <translation>绕过 CIDR</translation>
-    </message>
-    <message>
-        <source>Bypass Process Name</source>
-        <translation>绕过进程名</translation>
-    </message>
-    <message>
-        <source>Whitelist mode</source>
-        <translation>白名单模式</translation>
-    </message>
-    <message>
-        <source>Proxy CIDR</source>
-        <translation>代理 CIDR</translation>
-    </message>
-    <message>
-        <source>Proxy Process Name</source>
-        <translation>代理进程名</translation>
-    </message>
-    <message>
-        <source>Whether blacklisted or whitelisted, your traffic will be handled by nekobox_core (sing-tun). This is NOT equal to &quot;process mode&quot; of some software.</source>
-        <translation>无论是黑名单还是白名单，您的流量都将由 nekobox_core (sing-tun) 处理。这不等于某些软件的「进程模式」。</translation>
     </message>
     <message>
         <source>Troubleshooting</source>
@@ -791,14 +742,12 @@ https://matsuridayo.github.io/n-configuration/#vpn-tun</translation>
         <translation>取消</translation>
     </message>
     <message>
-        <source>Internal Tun</source>
-        <translation>内部 Tun</translation>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Enables Generic Segmentation offloading on the Tun device, Only supported on Linux&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>在 Tun 设备上启用通用分段卸载，仅支持 Linux</translation>
     </message>
     <message>
-        <source>Add a tun inbound to the profile startup, instead of using two processes.
-This needs to be run NekoBox with administrator privileges.</source>
-        <translation>在配置文件启动时添加一个tun inbound，而不是使用两个进程。
-这需要以管理员权限运行NekoBox。</translation>
+        <source>Enable GSO</source>
+        <translation>启用 GSO</translation>
     </message>
 </context>
 <context>
@@ -1158,10 +1107,6 @@ This needs to be run NekoBox with administrator privileges.</source>
         <translation>服务器</translation>
     </message>
     <message>
-        <source>Ads</source>
-        <translation>推广</translation>
-    </message>
-    <message>
         <source>Type</source>
         <translation>类型</translation>
     </message>
@@ -1278,16 +1223,8 @@ This needs to be run NekoBox with administrator privileges.</source>
         <translation>正在测试</translation>
     </message>
     <message>
-        <source>Http inbound is not enabled, can&apos;t set system proxy.</source>
-        <translation>HTTP 入站未启用，无法设置系统代理。</translation>
-    </message>
-    <message>
         <source>Update</source>
         <translation>更新</translation>
-    </message>
-    <message>
-        <source>Document</source>
-        <translation>文档</translation>
     </message>
     <message>
         <source>Select</source>
@@ -1300,32 +1237,6 @@ This needs to be run NekoBox with administrator privileges.</source>
     <message>
         <source>Move</source>
         <translation>移动</translation>
-    </message>
-    <message>
-        <source>Log</source>
-        <translation>日志</translation>
-    </message>
-    <message>
-        <source>Connection</source>
-        <translation>连接</translation>
-    </message>
-    <message>
-        <source>Status</source>
-        <translation>状态</translation>
-    </message>
-    <message>
-        <source>Outbound</source>
-        <translation>出站</translation>
-    </message>
-    <message>
-        <source>Destination</source>
-        <translation>目标地址</translation>
-    </message>
-    <message>
-        <source>Start: %1
-End: %2</source>
-        <translation>开始: %1
-结束: %2</translation>
     </message>
     <message>
         <source>Starting profile %1</source>
@@ -1352,10 +1263,6 @@ End: %2</source>
         <translation>删除不可用的配置</translation>
     </message>
     <message>
-        <source>Settings</source>
-        <translation>设置</translation>
-    </message>
-    <message>
         <source>New profile</source>
         <translation>手动输入配置</translation>
     </message>
@@ -1368,16 +1275,8 @@ End: %2</source>
         <translation>显示 QR Code 和分享链接</translation>
     </message>
     <message>
-        <source>Active Routing</source>
-        <translation>当前路由规则</translation>
-    </message>
-    <message>
         <source>Active Server</source>
         <translation>当前服务器</translation>
-    </message>
-    <message>
-        <source>Load routing and apply: %1</source>
-        <translation>加载路由规则并应用: %1</translation>
     </message>
     <message>
         <source>Copied %1 item(s)</source>
@@ -1488,10 +1387,6 @@ End: %2</source>
         <translation>未启动</translation>
     </message>
     <message>
-        <source>Current server is incompatible with Tun. Please stop the server first, enable Tun Mode, and then restart.</source>
-        <translation>当前服务器与 Tun 不兼容。请先停止服务器，打开 Tun 模式后再启动。</translation>
-    </message>
-    <message>
         <source>Open Config Folder</source>
         <translation>打开配置目录</translation>
     </message>
@@ -1532,10 +1427,6 @@ Split by line.</source>
     <message>
         <source>Restart the program to take effect.</source>
         <translation>重启程序生效。</translation>
-    </message>
-    <message>
-        <source>Please run NekoBox as admin</source>
-        <translation>请以管理员权限运行 NekoBox</translation>
     </message>
     <message>
         <source>Restart Proxy</source>
@@ -1580,6 +1471,42 @@ Split by line.</source>
     <message>
         <source>Stop Testing</source>
         <translation>停止测试</translation>
+    </message>
+    <message>
+        <source>Tun device misbehaving</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>If you have trouble starting VPN, you can force reset nekobox_core process here and then try starting the profile again.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Reset</source>
+        <translation type="unfinished">重置</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation type="unfinished">取消</translation>
+    </message>
+    <message>
+        <source>Please run Nekoray as admin</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Add new Group</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Delete selected Group</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Edit selected Group</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Remove %1?</source>
+        <translation type="unfinished">删除 %1 ?</translation>
     </message>
 </context>
 <context>
@@ -1734,6 +1661,57 @@ Release note:
     <message>
         <source>You can not input space characters here.</source>
         <translation></translation>
+    </message>
+</context>
+<context>
+    <name>RouteItem</name>
+    <message>
+        <source>Route Profile</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Name</source>
+        <translation>名称</translation>
+    </message>
+    <message>
+        <source>Rules</source>
+        <translation>规则</translation>
+    </message>
+    <message>
+        <source>New</source>
+        <translation>新的</translation>
+    </message>
+    <message>
+        <source>Move Up</source>
+        <translation>上移</translation>
+    </message>
+    <message>
+        <source>Move Down</source>
+        <translation>下移</translation>
+    </message>
+    <message>
+        <source>Delete</source>
+        <translation>删除</translation>
+    </message>
+    <message>
+        <source>Rule Attributes</source>
+        <translation>规则属性</translation>
+    </message>
+    <message>
+        <source>Attribute</source>
+        <translation>属性</translation>
+    </message>
+    <message>
+        <source>Outbound</source>
+        <translation>出站</translation>
+    </message>
+    <message>
+        <source>Name_Placeholder</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Import JSON</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 </TS>

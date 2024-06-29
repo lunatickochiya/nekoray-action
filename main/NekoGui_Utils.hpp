@@ -83,8 +83,9 @@ QJsonObject QString2QJsonObject(const QString &jsonString);
 
 QString QJsonObject2QString(const QJsonObject &jsonObject, bool compact);
 
-template<typename T>
-QJsonArray QList2QJsonArray(const QList<T> &list);
+QJsonArray QListInt2QJsonArray(const QList<int> &list);
+
+QJsonArray QListStr2QJsonArray(const QList<QString> &list);
 
 QList<int> QJsonArray2QListInt(const QJsonArray &arr);
 
@@ -98,6 +99,8 @@ QList<int> QJsonArray2QListInt(const QJsonArray &arr);
     if (src.contains(src_key)) dst[dst_key] = src[src_key];
 
 QList<QString> QJsonArray2QListString(const QJsonArray &arr);
+
+QJsonArray QString2QJsonArray(const QString& str);
 
 // Files
 

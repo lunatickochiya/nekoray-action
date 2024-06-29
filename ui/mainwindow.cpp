@@ -29,6 +29,7 @@
 
 #ifdef Q_OS_WIN
 #include "3rdparty/WinCommander.hpp"
+#include "ui/edit/dialog_edit_group.h"
 #else
 #ifdef Q_OS_LINUX
 #include "sys/linux/LinuxCap.h"
@@ -48,6 +49,7 @@
 #include <QMessageBox>
 #include <QDir>
 #include <QFileInfo>
+#include "edit/dialog_edit_group.h"
 
 void UI_InitMainWindow() {
     mainwindow = new MainWindow;
@@ -63,6 +65,12 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     NekoGui::profileManager->LoadManager();
 
     // Setup misc UI
+    // migrate old themes
+    bool isNum;
+    NekoGui::dataStore->theme.toInt(&isNum);
+    if (isNum) {
+        NekoGui::dataStore->theme = "System";
+    }
     themeManager->ApplyTheme(NekoGui::dataStore->theme);
     ui->setupUi(this);
     //
@@ -79,6 +87,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     ui->label_running->installEventFilter(this);
     ui->label_inbound->installEventFilter(this);
     ui->splitter->installEventFilter(this);
+    ui->tabWidget->installEventFilter(this);
     //
     RegisterHotkey(false);
     //
@@ -92,17 +101,15 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     }
 
     // software_name
-    if (IS_NEKO_BOX) {
-        software_name = "NekoBox";
-        software_core_name = "sing-box";
-        // replace default values
-        if (NekoGui::dataStore->log_level == "warning") NekoGui::dataStore->log_level = "info";
-        if (NekoGui::dataStore->mux_protocol.isEmpty()) NekoGui::dataStore->mux_protocol = "h2mux";
-        //
-        if (QDir("dashboard").count() == 0) {
-            QDir().mkdir("dashboard");
-            QFile::copy(":/neko/dashboard-notice.html", "dashboard/index.html");
-        }
+    software_name = "NekoBox";
+    software_core_name = "sing-box";
+    // replace default values
+    if (NekoGui::dataStore->log_level == "warning") NekoGui::dataStore->log_level = "info";
+    if (NekoGui::dataStore->mux_protocol.isEmpty()) NekoGui::dataStore->mux_protocol = "h2mux";
+    //
+    if (QDir("dashboard").count() == 0) {
+        QDir().mkdir("dashboard");
+        QFile::copy(":/neko/dashboard-notice.html", "dashboard/index.html");
     }
 
     // top bar
@@ -110,8 +117,6 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     ui->toolButton_preferences->setMenu(ui->menu_preferences);
     ui->toolButton_server->setMenu(ui->menu_server);
     ui->menubar->setVisible(false);
-    connect(ui->toolButton_document, &QToolButton::clicked, this, [=] { QDesktopServices::openUrl(QUrl("https://matsuridayo.github.io/")); });
-    connect(ui->toolButton_ads, &QToolButton::clicked, this, [=] { QDesktopServices::openUrl(QUrl("https://matsuricom.pages.dev/")); });
     connect(ui->toolButton_update, &QToolButton::clicked, this, [=] { runOnNewThread([=] { CheckUpdate(); }); });
 
     // Setup log UI
@@ -196,6 +201,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         group->Save();
     });
     ui->proxyListTable->verticalHeader()->setDefaultSectionSize(24);
+    ui->proxyListTable->setTabKeyNavigation(false);
 
     // search box
     ui->search->setVisible(false);
@@ -275,17 +281,6 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
             ui->menuActive_Server->addAction(a);
             if (++active_server_item_count == 100) break;
         }
-        // active routing
-        for (const auto &old: ui->menuActive_Routing->actions()) {
-            ui->menuActive_Routing->removeAction(old);
-            old->deleteLater();
-        }
-        for (const auto &name: NekoGui::Routing::List()) {
-            auto a = new QAction(name, this);
-            a->setCheckable(true);
-            a->setChecked(name == NekoGui::dataStore->active_routing);
-            ui->menuActive_Routing->addAction(a);
-        }
     });
     connect(ui->menuActive_Server, &QMenu::triggered, this, [=](QAction *a) {
         bool ok;
@@ -295,24 +290,6 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
             neko_stop();
         } else {
             neko_start(id);
-        }
-    });
-    connect(ui->menuActive_Routing, &QMenu::triggered, this, [=](QAction *a) {
-        auto fn = a->text();
-        if (!fn.isEmpty()) {
-            NekoGui::Routing r;
-            r.load_control_must = true;
-            r.fn = ROUTES_PREFIX + fn;
-            if (r.Load()) {
-                if (QMessageBox::question(GetMessageBoxParent(), software_name, tr("Load routing and apply: %1").arg(fn) + "\n" ) == QMessageBox::Yes) {
-                    NekoGui::Routing::SetToActive(fn);
-                    if (NekoGui::dataStore->started_id >= 0) {
-                        neko_start(NekoGui::dataStore->started_id);
-                    } else {
-                        refresh_status();
-                    }
-                }
-            }
         }
     });
     connect(ui->actionRemember_last_proxy, &QAction::triggered, this, [=](bool checked) {
@@ -531,6 +508,7 @@ void MainWindow::dialog_message_impl(const QString &sender, const QString &info)
     if (info.contains("UpdateDataStore")) {
         auto suggestRestartProxy = NekoGui::dataStore->Save();
         if (info.contains("RouteChanged")) {
+            NekoGui::dataStore->routing->Save();
             suggestRestartProxy = true;
         }
         if (info.contains("NeedRestart")) {
@@ -771,11 +749,15 @@ void MainWindow::neko_set_spmode_vpn(bool enable, bool save) {
                 }
 #endif
 #ifdef Q_OS_WIN
-                auto n = QMessageBox::warning(GetMessageBoxParent(), software_name, tr("Please run NekoBox as admin"), QMessageBox::Yes | QMessageBox::No);
+                auto n = QMessageBox::warning(GetMessageBoxParent(), software_name, tr("Please run Nekoray as admin"), QMessageBox::Yes | QMessageBox::No);
                 if (n == QMessageBox::Yes) {
                     this->exit_reason = 3;
                     on_menu_exit_triggered();
                 }
+#endif
+
+#ifdef Q_OS_MACOS
+                MessageBoxWarning("Need administrator privilege", "Enabling TUN mode requires elevated privileges, please run Nekoray as root.");
 #endif
                 neko_set_spmode_FAILED
             }
@@ -1591,6 +1573,73 @@ void MainWindow::on_masterLogBrowser_customContextMenuRequested(const QPoint &po
     menu->exec(ui->masterLogBrowser->viewport()->mapToGlobal(pos)); // 弹出菜单
 }
 
+void MainWindow::on_tabWidget_customContextMenuRequested(const QPoint &p) {
+    int clickedIndex = ui->tabWidget->tabBar()->tabAt(p);
+    if (clickedIndex == -1) {
+        auto* menu = new QMenu(this);
+        auto* addAction = new QAction(tr("Add new Group"), this);
+        connect(addAction, &QAction::triggered, this, [=]{
+            auto ent = NekoGui::ProfileManager::NewGroup();
+            auto dialog = new DialogEditGroup(ent, this);
+            int ret = dialog->exec();
+            dialog->deleteLater();
+
+            if (ret == QDialog::Accepted) {
+                NekoGui::profileManager->AddGroup(ent);
+                MW_dialog_message(Dialog_DialogManageGroups, "refresh-1");
+            }
+        });
+
+        menu->addAction(addAction);
+        menu->exec(ui->tabWidget->tabBar()->mapToGlobal(p));
+        return;
+    }
+
+    ui->tabWidget->setCurrentIndex(clickedIndex);
+    auto* menu = new QMenu(this);
+
+    auto* addAction = new QAction(tr("Add new Group"), this);
+    auto* deleteAction = new QAction(tr("Delete selected Group"), this);
+    auto* editAction = new QAction(tr("Edit selected Group"), this);
+    connect(addAction, &QAction::triggered, this, [=]{
+        auto ent = NekoGui::ProfileManager::NewGroup();
+        auto dialog = new DialogEditGroup(ent, this);
+        int ret = dialog->exec();
+        dialog->deleteLater();
+
+        if (ret == QDialog::Accepted) {
+            NekoGui::profileManager->AddGroup(ent);
+            MW_dialog_message(Dialog_DialogManageGroups, "refresh-1");
+        }
+    });
+    connect(deleteAction, &QAction::triggered, this, [=] {
+        auto id = NekoGui::profileManager->groupsTabOrder[clickedIndex];
+        if (QMessageBox::question(this, tr("Confirmation"), tr("Remove %1?").arg(NekoGui::profileManager->groups[id]->name)) ==
+            QMessageBox::StandardButton::Yes) {
+            NekoGui::profileManager->DeleteGroup(id);
+            MW_dialog_message(Dialog_DialogManageGroups, "refresh-1");
+        }
+    });
+    connect(editAction, &QAction::triggered, this, [=]{
+        auto id = NekoGui::profileManager->groupsTabOrder[clickedIndex];
+        auto ent = NekoGui::profileManager->groups[id];
+        auto dialog = new DialogEditGroup(ent, this);
+        connect(dialog, &QDialog::finished, this, [=] {
+            if (dialog->result() == QDialog::Accepted) {
+                ent->Save();
+                MW_dialog_message(Dialog_DialogManageGroups, "refresh" + Int2String(ent->id));
+            }
+            dialog->deleteLater();
+        });
+        dialog->show();
+    });
+    menu->addAction(addAction);
+    menu->addAction(editAction);
+    if (NekoGui::profileManager->groups.size() > 1) menu->addAction(deleteAction);
+    menu->exec(ui->tabWidget->tabBar()->mapToGlobal(p));
+    return;
+}
+
 // eventFilter
 
 bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
@@ -1601,6 +1650,9 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
             return true;
         } else if (obj == ui->label_inbound && mouseEvent->button() == Qt::LeftButton) {
             on_menu_basic_settings_triggered();
+            return true;
+        } else if (obj == ui->tabWidget && mouseEvent->button() == Qt::RightButton) {
+            on_tabWidget_customContextMenuRequested(mouseEvent->position().toPoint());
             return true;
         }
     } else if (event->type() == QEvent::MouseButtonDblClick) {
