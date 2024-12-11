@@ -6,6 +6,8 @@
 #include "RouteEntity.h"
 
 namespace NekoGui {
+    const int INVALID_ID = -99999;
+
     class ProfileManager : private JsonStore {
     public:
         // JsonStore
@@ -48,9 +50,11 @@ namespace NekoGui {
 
         std::shared_ptr<Group> CurrentGroup();
 
-        bool AddRouteChain(std::shared_ptr<RoutingChain> chain);
+        bool AddRouteChain(const std::shared_ptr<RoutingChain>& chain);
 
         std::shared_ptr<RoutingChain> GetRouteChain(int id);
+
+        void UpdateRouteChains(const QList<std::shared_ptr<RoutingChain>>& newChain);
 
     private:
         // sort by id

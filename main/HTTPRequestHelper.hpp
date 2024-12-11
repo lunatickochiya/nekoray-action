@@ -22,9 +22,11 @@ namespace NekoGui_network {
         ;
 
     public:
-        static NekoHTTPResponse HttpGet(const QUrl &url);
+        static NekoHTTPResponse HttpGet(const QString &url);
 
         static QString GetHeader(const QList<QPair<QByteArray, QByteArray>> &header, const QString &name);
+
+        static QString DownloadGeoAsset(const QString &url, const QString &fileName);
     };
 } // namespace NekoGui_network
 

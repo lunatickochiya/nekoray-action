@@ -8,11 +8,10 @@ namespace NekoGui {
         QString def_outbound = "proxy";
 
         // DNS
-        QString remote_dns = "https://8.8.8.8/dns-query";
+        QString remote_dns = "tls://8.8.8.8";
         QString remote_dns_strategy = "";
         QString direct_dns = "localhost";
         QString direct_dns_strategy = "";
-        bool dns_routing = true;
         bool use_dns_object = false;
         QString dns_object = "";
         QString dns_final_out = "proxy";
@@ -25,8 +24,6 @@ namespace NekoGui {
         explicit Routing(int preset = 0);
 
         static QStringList List();
-
-        static bool SetToActive(const QString &name);
     };
 
     class ExtraCore : public JsonStore {
@@ -40,16 +37,6 @@ namespace NekoGui {
         void Set(const QString &id, const QString &path);
 
         void Delete(const QString &id);
-    };
-
-    class InboundAuthorization : public JsonStore {
-    public:
-        QString username;
-        QString password;
-
-        InboundAuthorization();
-
-        [[nodiscard]] bool NeedAuth() const;
     };
 
     class DataStore : public JsonStore {
@@ -71,7 +58,7 @@ namespace NekoGui {
         int imported_count = 0;
         bool refreshing_group_list = false;
         bool refreshing_group = false;
-        int resolve_count = 0;
+        std::atomic<int> resolve_count = 0;
 
         // Flags
         QStringList argv = {};
@@ -81,29 +68,26 @@ namespace NekoGui {
         bool flag_debug = false;
         bool flag_restart_tun_on = false;
         bool flag_reorder = false;
+        bool flag_dns_set = false;
 
         // Saved
 
         // Misc
-        QString log_level = "warning";
+        QString log_level = "info";
         QString test_latency_url = "http://cp.cloudflare.com/";
-        QString test_download_url = "http://cachefly.cachefly.net/10mb.test";
-        int test_download_timeout = 30;
-        int test_concurrent = 5;
-        bool old_share_link_format = true;
-        int traffic_loop_interval = 1000;
+        int test_concurrent = 10;
+        int traffic_loop_interval = 500;
         bool disable_traffic_stats = false;
         int current_group = 0; // group id
-        QString mux_protocol = "";
+        QString mux_protocol = "smux";
         bool mux_padding = false;
         int mux_concurrency = 8;
         bool mux_default_on = false;
         QString theme = "0";
-        QString v2ray_asset_dir = "";
         int language = 0;
+        QString font = "";
+        int font_size = 0;
         QString mw_size = "";
-        bool check_include_pre = false;
-        QString system_proxy_format = "";
         QStringList log_ignore = {};
         bool start_minimal = false;
         int max_log_line = 200;
@@ -116,21 +100,23 @@ namespace NekoGui {
         bool sub_insecure = false;
         int sub_auto_update = -30;
 
+        // Assets
+        QString geoip_download_url = "";
+        QString geosite_download_url = "";
+
         // Security
         bool skip_cert = false;
-        int enable_js_hook = 0;
         QString utlsFingerprint = "";
 
         // Remember
         QStringList remember_spmode = {};
         int remember_id = -1919;
         bool remember_enable = false;
+        bool windows_set_admin = false;
 
         // Socks & HTTP Inbound
         QString inbound_address = "127.0.0.1";
-        int inbound_socks_port = 2080; // or Mixed
-        int inbound_http_port = 2081;
-        InboundAuthorization *inbound_auth = new InboundAuthorization;
+        int inbound_socks_port = 2080; // Mixed, actually
         QString custom_inbound = "{\"inbounds\": []}";
 
         // Routing
@@ -140,20 +126,33 @@ namespace NekoGui {
         // VPN
         bool fake_dns = false;
         bool enable_gso = false;
-        int vpn_implementation = 0;
-        int vpn_mtu = 9000;
+        bool auto_redirect = false;
+        QString vpn_implementation = "system";
+        int vpn_mtu = 1500;
         bool vpn_ipv6 = false;
-        bool vpn_hide_console = true;
-        bool vpn_strict_route = false;
-        bool vpn_rule_white = false;
-        QString vpn_rule_process = "";
-        QString vpn_rule_cidr = "";
+        bool vpn_strict_route = true;
 
         // NTP
         bool enable_ntp = false;
         QString ntp_server_address = "";
         int ntp_server_port = 0;
         QString ntp_interval = "";
+
+        // Hijack
+        bool enable_dns_server = false;
+        QString dns_server_listen_addr = "127.0.0.1";
+        int dns_server_listen_port = 53;
+        QString dns_v4_resp = "127.0.0.1";
+        QString dns_v6_resp = "::1";
+        QStringList dns_server_rules = {};
+        bool enable_redirect = false;
+        QString redirect_listen_address = "127.0.0.1";
+        int redirect_listen_port = 443;
+
+        // System dns
+        bool system_dns_set = false;
+        bool is_dhcp = false;
+        QStringList system_dns_servers = {};
 
         // Hotkey
         QString hotkey_mainwindow = "";
@@ -164,11 +163,9 @@ namespace NekoGui {
 
         // Core
         int core_box_clash_api = -9090;
+        QString core_box_clash_listen_addr = "127.0.0.1";
         QString core_box_clash_api_secret = "";
         QString core_box_underlying_dns = "";
-        bool core_ray_direct_dns = false;
-        bool core_ray_windows_disable_auto_interface = false;
-        QString core_ray_freedom_domainStrategy = "";
 
         // Other Core
         ExtraCore *extraCore = new ExtraCore;
@@ -179,7 +176,7 @@ namespace NekoGui {
 
         void UpdateStartedId(int id);
 
-        QString GetUserAgent(bool isDefault = false) const;
+        [[nodiscard]] QString GetUserAgent(bool isDefault = false) const;
     };
 
     extern DataStore *dataStore;

@@ -15,6 +15,7 @@
 #include <QShortcut>
 #include <QSemaphore>
 #include <QMutex>
+#include <QThreadPool>
 
 #include "GroupSort.hpp"
 
@@ -51,7 +52,7 @@ public:
 
     void neko_start(int _id = -1);
 
-    void neko_stop(bool crash = false, bool sem = false);
+    void neko_stop(bool crash = false, bool sem = false, bool manual = false);
 
     void neko_set_spmode_system_proxy(bool enable, bool save = true);
 
@@ -59,13 +60,17 @@ public:
 
     void neko_set_spmode_vpn(bool enable, bool save = true);
 
+    bool get_elevated_permissions(int reason = 3);
+
     void show_log_impl(const QString &log);
 
     void start_select_mode(QObject *context, const std::function<void(int)> &callback);
 
     void RegisterHotkey(bool unregister);
 
-    bool StopVPNProcess(bool unconditional = false);
+    bool StopVPNProcess();
+
+    void DownloadAssets(const QString &geoipUrl, const QString &geositeUrl);
 
 signals:
 
@@ -93,17 +98,15 @@ private slots:
 
     void on_menu_add_from_input_triggered();
 
-    void on_menu_add_from_clipboard_triggered();
+    static void on_menu_add_from_clipboard_triggered();
 
     void on_menu_clone_triggered();
 
-    void on_menu_move_triggered();
+    void on_menu_delete_repeat_triggered();
 
     void on_menu_delete_triggered();
 
     void on_menu_reset_traffic_triggered();
-
-    void on_menu_profile_debug_info_triggered();
 
     void on_menu_copy_links_triggered();
 
@@ -121,13 +124,15 @@ private slots:
 
     void on_menu_select_all_triggered();
 
-    void on_menu_delete_repeat_triggered();
-
     void on_menu_remove_unavailable_triggered();
 
-    void on_menu_update_subscription_triggered();
+    void on_menu_remove_invalid_triggered();
+
+    void on_menu_resolve_selected_triggered();
 
     void on_menu_resolve_domain_triggered();
+
+    void on_menu_update_subscription_triggered();
 
     void on_proxyListTable_itemDoubleClicked(QTableWidgetItem *item);
 
@@ -135,11 +140,17 @@ private slots:
 
     void on_tabWidget_currentChanged(int index);
 
+    void on_tabWidget_customContextMenuRequested(const QPoint& p);
+
 private:
     Ui::MainWindow *ui;
     QSystemTrayIcon *tray;
     QShortcut *shortcut_ctrl_f = new QShortcut(QKeySequence("Ctrl+F"), this);
     QShortcut *shortcut_esc = new QShortcut(QKeySequence("Esc"), this);
+    //
+    QThreadPool *speedTestThreadPool = new QThreadPool(this);
+    std::atomic<bool> stopSpeedtest = false;
+    QMutex speedtestRunning;
     //
     NekoGui_sys::CoreProcess *core_process;
     qint64 vpn_pid = 0;
@@ -160,6 +171,8 @@ private:
     QMutex mu_exit;
     QSemaphore sem_stopped;
     int exit_reason = 0;
+    //
+    QMutex mu_download_assets;
 
     QList<std::shared_ptr<NekoGui::ProxyEntity>> get_now_selected_list();
 
@@ -179,15 +192,23 @@ private:
 
     void HotkeyEvent(const QString &key);
 
-    // grpc and ...
+    void RegisterShortcuts();
+
+    // grpc
 
     static void setup_grpc();
 
-    void speedtest_current_group(int mode);
+    void speedtest_current_group(const QList<std::shared_ptr<NekoGui::ProxyEntity>>& profiles);
 
-    void speedtest_current();
+    void stopSpeedTests();
+
+    void RunSpeedTest(const QString& config, bool useDefault, const QStringList& outboundTags, const QMap<QString, int>& tag2entID, int entID = -1);
+
+    void url_test_current();
 
     static void stop_core_daemon();
+
+    bool set_system_dns(bool set, bool save_set = true);
 
     void CheckUpdate();
 

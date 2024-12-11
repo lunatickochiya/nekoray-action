@@ -38,10 +38,10 @@
          </size>
         </property>
         <property name="popupMode">
-         <enum>QToolButton::InstantPopup</enum>
+         <enum>QToolButton::ToolButtonPopupMode::InstantPopup</enum>
         </property>
         <property name="toolButtonStyle">
-         <enum>Qt::ToolButtonTextUnderIcon</enum>
+         <enum>Qt::ToolButtonStyle::ToolButtonTextUnderIcon</enum>
         </property>
        </widget>
       </item>
@@ -60,10 +60,10 @@
          </size>
         </property>
         <property name="popupMode">
-         <enum>QToolButton::InstantPopup</enum>
+         <enum>QToolButton::ToolButtonPopupMode::InstantPopup</enum>
         </property>
         <property name="toolButtonStyle">
-         <enum>Qt::ToolButtonTextUnderIcon</enum>
+         <enum>Qt::ToolButtonStyle::ToolButtonTextUnderIcon</enum>
         </property>
        </widget>
       </item>
@@ -82,54 +82,10 @@
          </size>
         </property>
         <property name="popupMode">
-         <enum>QToolButton::InstantPopup</enum>
+         <enum>QToolButton::ToolButtonPopupMode::InstantPopup</enum>
         </property>
         <property name="toolButtonStyle">
-         <enum>Qt::ToolButtonTextUnderIcon</enum>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QToolButton" name="toolButton_ads">
-        <property name="text">
-         <string>Ads</string>
-        </property>
-        <property name="icon">
-         <iconset theme="b-internet-web-browser"/>
-        </property>
-        <property name="iconSize">
-         <size>
-          <width>24</width>
-          <height>24</height>
-         </size>
-        </property>
-        <property name="popupMode">
-         <enum>QToolButton::InstantPopup</enum>
-        </property>
-        <property name="toolButtonStyle">
-         <enum>Qt::ToolButtonTextUnderIcon</enum>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QToolButton" name="toolButton_document">
-        <property name="text">
-         <string>Document</string>
-        </property>
-        <property name="icon">
-         <iconset theme="b-dialog-question"/>
-        </property>
-        <property name="iconSize">
-         <size>
-          <width>24</width>
-          <height>24</height>
-         </size>
-        </property>
-        <property name="popupMode">
-         <enum>QToolButton::InstantPopup</enum>
-        </property>
-        <property name="toolButtonStyle">
-         <enum>Qt::ToolButtonTextUnderIcon</enum>
+         <enum>Qt::ToolButtonStyle::ToolButtonTextUnderIcon</enum>
         </property>
        </widget>
       </item>
@@ -148,10 +104,10 @@
          </size>
         </property>
         <property name="popupMode">
-         <enum>QToolButton::InstantPopup</enum>
+         <enum>QToolButton::ToolButtonPopupMode::InstantPopup</enum>
         </property>
         <property name="toolButtonStyle">
-         <enum>Qt::ToolButtonTextUnderIcon</enum>
+         <enum>Qt::ToolButtonStyle::ToolButtonTextUnderIcon</enum>
         </property>
        </widget>
       </item>
@@ -171,6 +127,13 @@
          </widget>
         </item>
         <item>
+         <widget class="QCheckBox" name="system_dns">
+          <property name="text">
+           <string>System DNS</string>
+          </property>
+         </widget>
+        </item>
+        <item>
          <widget class="QCheckBox" name="checkBox_SystemProxy">
           <property name="text">
            <string>System Proxy</string>
@@ -182,7 +145,7 @@
       <item>
        <spacer name="horizontalSpacer">
         <property name="orientation">
-         <enum>Qt::Horizontal</enum>
+         <enum>Qt::Orientation::Horizontal</enum>
         </property>
         <property name="sizeHint" stdset="0">
          <size>
@@ -204,7 +167,7 @@
     <item>
      <widget class="QSplitter" name="splitter">
       <property name="orientation">
-       <enum>Qt::Vertical</enum>
+       <enum>Qt::Orientation::Vertical</enum>
       </property>
       <widget class="QTabWidget" name="tabWidget">
        <property name="currentIndex">
@@ -236,19 +199,19 @@
          <item row="0" column="0">
           <widget class="MyTableWidget" name="proxyListTable">
            <property name="contextMenuPolicy">
-            <enum>Qt::CustomContextMenu</enum>
+            <enum>Qt::ContextMenuPolicy::CustomContextMenu</enum>
            </property>
            <property name="editTriggers">
-            <set>QAbstractItemView::NoEditTriggers</set>
+            <set>QAbstractItemView::EditTrigger::NoEditTriggers</set>
            </property>
            <property name="alternatingRowColors">
             <bool>true</bool>
            </property>
            <property name="selectionBehavior">
-            <enum>QAbstractItemView::SelectRows</enum>
+            <enum>QAbstractItemView::SelectionBehavior::SelectRows</enum>
            </property>
            <property name="horizontalScrollMode">
-            <enum>QAbstractItemView::ScrollPerPixel</enum>
+            <enum>QAbstractItemView::ScrollMode::ScrollPerPixel</enum>
            </property>
            <property name="wordWrap">
             <bool>false</bool>
@@ -318,7 +281,7 @@
            <item>
             <widget class="QTextBrowser" name="masterLogBrowser">
              <property name="contextMenuPolicy">
-              <enum>Qt::CustomContextMenu</enum>
+              <enum>Qt::ContextMenuPolicy::CustomContextMenu</enum>
              </property>
              <property name="openLinks">
               <bool>false</bool>
@@ -344,10 +307,10 @@
       <item>
        <spacer name="horizontalSpacer_2">
         <property name="orientation">
-         <enum>Qt::Horizontal</enum>
+         <enum>Qt::Orientation::Horizontal</enum>
         </property>
         <property name="sizeType">
-         <enum>QSizePolicy::Maximum</enum>
+         <enum>QSizePolicy::Policy::Maximum</enum>
         </property>
         <property name="sizeHint" stdset="0">
          <size>
@@ -381,7 +344,7 @@
      <x>0</x>
      <y>0</y>
      <width>800</width>
-     <height>25</height>
+     <height>17</height>
     </rect>
    </property>
    <widget class="QMenu" name="menu_program">
@@ -408,12 +371,6 @@
      </property>
      <addaction name="actionfake_2"/>
     </widget>
-    <widget class="QMenu" name="menuActive_Routing">
-     <property name="title">
-      <string>Active Routing</string>
-     </property>
-     <addaction name="actionfake_3"/>
-    </widget>
     <addaction name="actionShow_window"/>
     <addaction name="menu_add_from_clipboard2"/>
     <addaction name="menu_scan_qr"/>
@@ -422,7 +379,6 @@
     <addaction name="actionRemember_last_proxy"/>
     <addaction name="actionAllow_LAN"/>
     <addaction name="menuActive_Server"/>
-    <addaction name="menuActive_Routing"/>
     <addaction name="menu_spmode"/>
     <addaction name="menu_program_preference"/>
     <addaction name="separator"/>
@@ -455,29 +411,6 @@
      <addaction name="menu_copy_links"/>
      <addaction name="menu_copy_links_nkr"/>
     </widget>
-    <widget class="QMenu" name="menuCurrent_Group">
-     <property name="title">
-      <string>Current Group</string>
-     </property>
-     <addaction name="actionfake_5"/>
-     <addaction name="menu_tcp_ping"/>
-     <addaction name="menu_url_test"/>
-     <addaction name="menu_full_test"/>
-     <addaction name="menu_stop_testing"/>
-     <addaction name="menu_clear_test_result"/>
-     <addaction name="menu_resolve_domain"/>
-     <addaction name="separator"/>
-     <addaction name="menu_remove_unavailable"/>
-     <addaction name="menu_delete_repeat"/>
-     <addaction name="separator"/>
-     <addaction name="menu_update_subscription"/>
-    </widget>
-    <widget class="QMenu" name="menuCurrent_Select">
-     <property name="title">
-      <string>Current Select</string>
-     </property>
-     <addaction name="actionfake_4"/>
-    </widget>
     <addaction name="menu_add_from_input"/>
     <addaction name="menu_add_from_clipboard"/>
     <addaction name="separator"/>
@@ -485,22 +418,30 @@
     <addaction name="menu_stop"/>
     <addaction name="separator"/>
     <addaction name="menu_select_all"/>
-    <addaction name="menu_move"/>
     <addaction name="menu_clone"/>
     <addaction name="menu_reset_traffic"/>
     <addaction name="menu_delete"/>
-    <addaction name="separator"/>
     <addaction name="menu_share_item"/>
     <addaction name="separator"/>
-    <addaction name="menuCurrent_Select"/>
-    <addaction name="menuCurrent_Group"/>
-    <addaction name="separator"/>
-    <addaction name="menu_profile_debug_info"/>
-    <addaction name="separator"/>
+    <addaction name="actionUrl_Test_Selected"/>
+    <addaction name="menu_resolve_selected"/>
+   </widget>
+   <widget class="QMenu" name="menuHidden_menu">
+    <property name="title">
+     <string>Hidden menu</string>
+    </property>
+    <addaction name="menu_update_subscription"/>
+    <addaction name="menu_resolve_domain"/>
+    <addaction name="menu_remove_invalid"/>
+    <addaction name="actionUrl_Test_Group"/>
+    <addaction name="menu_remove_unavailable"/>
+    <addaction name="menu_clear_test_result"/>
+    <addaction name="menu_delete_repeat"/>
    </widget>
    <addaction name="menu_program"/>
    <addaction name="menu_preferences"/>
    <addaction name="menu_server"/>
+   <addaction name="menuHidden_menu"/>
   </widget>
   <action name="menu_exit">
    <property name="text">
@@ -780,6 +721,9 @@
    <property name="shortcut">
     <string notr="true">Ctrl+U</string>
    </property>
+   <property name="visible">
+    <bool>true</bool>
+   </property>
   </action>
   <action name="menu_resolve_domain">
    <property name="text">
@@ -828,6 +772,50 @@
   <action name="menu_stop_testing">
    <property name="text">
     <string>Stop Testing</string>
+   </property>
+  </action>
+  <action name="actionUrl_Test_Selected">
+   <property name="text">
+    <string>Url Test Selected</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Shift+S</string>
+   </property>
+   <property name="visible">
+    <bool>true</bool>
+   </property>
+  </action>
+  <action name="actionUrl_Test_Group">
+   <property name="enabled">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Url Test Group</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Shift+G</string>
+   </property>
+   <property name="visible">
+    <bool>true</bool>
+   </property>
+  </action>
+  <action name="menu_resolve_selected">
+   <property name="text">
+    <string>Resolve Selected Domain</string>
+   </property>
+   <property name="visible">
+    <bool>true</bool>
+   </property>
+  </action>
+  <action name="menu_remove_invalid">
+   <property name="text">
+    <string>Remove Invalid</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Alt+I</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::MenuRole::TextHeuristicRole</enum>
    </property>
   </action>
  </widget>

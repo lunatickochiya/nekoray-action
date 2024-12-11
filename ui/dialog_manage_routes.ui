@@ -34,35 +34,77 @@
             </property>
            </widget>
           </item>
-          <item row="3" column="0">
-           <widget class="QLabel" name="label_3">
+          <item row="2" column="1">
+           <widget class="QComboBox" name="domainStrategyCombo">
+            <property name="editable">
+             <bool>false</bool>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="0">
+           <widget class="QLabel" name="route_prof_l">
             <property name="text">
-             <string>Server Address Strategy</string>
+             <string>Routing Profile</string>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="1">
+           <widget class="QComboBox" name="default_out">
+            <item>
+             <property name="text">
+              <string notr="true">proxy</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string notr="true">direct</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item row="5" column="0">
+           <widget class="QLabel" name="default_out_l">
+            <property name="toolTip">
+             <string>The outbound tag to use when the request is not handled by any rule</string>
+            </property>
+            <property name="text">
+             <string>Default Outbound</string>
             </property>
            </widget>
           </item>
           <item row="2" column="0">
            <widget class="QLabel" name="label_6">
             <property name="toolTip">
-             <string notr="true">For V2Ray, it sets routing.domainStrategy
-For sing-box, it sets inbound.domain_strategy</string>
+             <string notr="true">inbound.domain_strategy
+when used, domain destinations are resolved to IP before routing.</string>
             </property>
             <property name="text">
-             <string>Domain Strategy</string>
+             <string>Inbound Domain Strategy</string>
             </property>
            </widget>
+          </item>
+          <item row="3" column="0">
+           <widget class="QLabel" name="label_3">
+            <property name="toolTip">
+             <string>outbound.domain_strategy
+when set, domain destinations are resolved to IP before connect,
+also if the connection cannot be established with the current address family (ipv4, ipv6), a fallback connection is created shortly after, with the other address family.</string>
+            </property>
+            <property name="text">
+             <string>Outbound Domain Strategy</string>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="1">
+           <widget class="QComboBox" name="route_prof"/>
           </item>
           <item row="1" column="0">
            <widget class="QLabel" name="label">
+            <property name="toolTip">
+             <string>Sniffs the connections intial packet(s?) to identify the protocol and the SNI. Sniff result for destination also rewrites the destionation of the connection to the sniffed SNI. For more data on the sniffed protocol refer to the sing-box's documentation.</string>
+            </property>
             <property name="text">
              <string>Sniffing Mode</string>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="1">
-           <widget class="QComboBox" name="domainStrategyCombo">
-            <property name="editable">
-             <bool>false</bool>
             </property>
            </widget>
           </item>
@@ -85,13 +127,122 @@ For sing-box, it sets inbound.domain_strategy</string>
             </item>
            </widget>
           </item>
+         </layout>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="tab_4">
+      <attribute name="title">
+       <string>Hijack</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="verticalLayout_7">
+       <item>
+        <widget class="QGroupBox" name="hijack_box">
+         <property name="title">
+          <string>DNS Server</string>
+         </property>
+         <layout class="QFormLayout" name="formLayout">
+          <item row="0" column="0">
+           <widget class="QCheckBox" name="dnshijack_enable">
+            <property name="text">
+             <string>Enable</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QPushButton" name="dnshijack_what">
+            <property name="text">
+             <string>How does it work?</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="dnshijack_listenaddr_l">
+            <property name="text">
+             <string>Listen Address</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QLineEdit" name="dnshijack_listenaddr"/>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="dnshijack_listenport_l">
+            <property name="text">
+             <string>Listen Port</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QLineEdit" name="dnshijack_listenport"/>
+          </item>
+          <item row="5" column="0">
+           <widget class="QLabel" name="dnshijack_rules_l">
+            <property name="toolTip">
+             <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Following format should be used:&lt;br/&gt;domain:a.com&lt;/p&gt;&lt;p&gt;suffix:a.com&lt;/p&gt;&lt;p&gt;regex:someregex&lt;/p&gt;&lt;p&gt;rule_set:nameOfRuleSet&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+            </property>
+            <property name="text">
+             <string>Rules</string>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="1">
+           <widget class="QTextEdit" name="dnshijack_rules"/>
+          </item>
+          <item row="3" column="1">
+           <widget class="QLineEdit" name="dnshijack_v4resp"/>
+          </item>
+          <item row="3" column="0">
+           <widget class="QLabel" name="dnshijack_v4resp_l">
+            <property name="text">
+             <string>IPv4 Response</string>
+            </property>
+           </widget>
+          </item>
           <item row="4" column="1">
-           <widget class="QComboBox" name="route_prof"/>
+           <widget class="QLineEdit" name="dnshijack_v6resp"/>
           </item>
           <item row="4" column="0">
-           <widget class="QLabel" name="route_prof_l">
+           <widget class="QLabel" name="dnshijack_v6resp_l">
             <property name="text">
-             <string>Routing Profile</string>
+             <string>IPv6 Response</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="groupBox_3">
+         <property name="title">
+          <string>Redirect Settings</string>
+         </property>
+         <layout class="QFormLayout" name="formLayout_2">
+          <item row="2" column="1">
+           <widget class="QLineEdit" name="redirect_listenport"/>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="redirect_listenport_l">
+            <property name="text">
+             <string>Listen Port</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="0">
+           <widget class="QCheckBox" name="redirect_enable">
+            <property name="text">
+             <string>Enable</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QLineEdit" name="redirect_listenaddr"/>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="redirect_listenaddr_l">
+            <property name="text">
+             <string>Listen Address</string>
             </property>
            </widget>
           </item>
@@ -112,6 +263,41 @@ For sing-box, it sets inbound.domain_strategy</string>
          </property>
          <layout class="QGridLayout" name="gridLayout">
           <item row="1" column="0">
+           <widget class="QLabel" name="label_9">
+            <property name="text">
+             <string>Remote DNS</string>
+            </property>
+            <property name="buddy">
+             <cstring>widget</cstring>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="2">
+           <layout class="QHBoxLayout" name="horizontalLayout_3">
+            <item>
+             <widget class="QLabel" name="dns_final_out_l">
+              <property name="text">
+               <string>Default DNS server</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QComboBox" name="dns_final_out">
+              <item>
+               <property name="text">
+                <string notr="true">remote</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string notr="true">direct</string>
+               </property>
+              </item>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item row="2" column="0">
            <widget class="QLabel" name="label_8">
             <property name="toolTip">
              <string>This is especially important and it is recommended to use the default value of &quot;localhost&quot;.
@@ -123,7 +309,7 @@ For more information, see the document &quot;Configuration/DNS&quot;.</string>
             </property>
            </widget>
           </item>
-          <item row="0" column="2">
+          <item row="1" column="2">
            <layout class="QHBoxLayout" name="horizontalLayout_7">
             <item>
              <widget class="QComboBox" name="remote_dns">
@@ -138,7 +324,12 @@ For more information, see the document &quot;Configuration/DNS&quot;.</string>
               </property>
               <item>
                <property name="text">
-                <string>8.8.8.8</string>
+                <string>tls://8.8.8.8</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string notr="true">8.8.8.8</string>
                </property>
               </item>
               <item>
@@ -190,62 +381,7 @@ For more information, see the document &quot;Configuration/DNS&quot;.</string>
             </item>
            </layout>
           </item>
-          <item row="0" column="0">
-           <widget class="QLabel" name="label_9">
-            <property name="text">
-             <string>Remote DNS</string>
-            </property>
-            <property name="buddy">
-             <cstring>widget</cstring>
-            </property>
-           </widget>
-          </item>
           <item row="2" column="2">
-           <layout class="QHBoxLayout" name="horizontalLayout_3">
-            <item>
-             <widget class="QCheckBox" name="dns_routing">
-              <property name="text">
-               <string>Enable DNS Routing</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <spacer name="horizontalSpacer_2">
-              <property name="orientation">
-               <enum>Qt::Horizontal</enum>
-              </property>
-              <property name="sizeHint" stdset="0">
-               <size>
-                <width>40</width>
-                <height>20</height>
-               </size>
-              </property>
-             </spacer>
-            </item>
-            <item>
-             <widget class="QLabel" name="dns_final_out_l">
-              <property name="text">
-               <string>Final DNS Out</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QComboBox" name="dns_final_out">
-              <item>
-               <property name="text">
-                <string notr="true">proxy</string>
-               </property>
-              </item>
-              <item>
-               <property name="text">
-                <string notr="true">bypass</string>
-               </property>
-              </item>
-             </widget>
-            </item>
-           </layout>
-          </item>
-          <item row="1" column="2">
            <layout class="QHBoxLayout" name="horizontalLayout_8">
             <item>
              <widget class="QComboBox" name="direct_dns">
@@ -316,6 +452,13 @@ For more information, see the document &quot;Configuration/DNS&quot;.</string>
              <widget class="QComboBox" name="direct_dns_strategy"/>
             </item>
            </layout>
+          </item>
+          <item row="3" column="2">
+           <widget class="QCheckBox" name="enable_fakeip">
+            <property name="text">
+             <string>Enable FakeIP</string>
+            </property>
+           </widget>
           </item>
          </layout>
         </widget>
@@ -396,6 +539,13 @@ For more information, see the document &quot;Configuration/DNS&quot;.</string>
               </widget>
              </item>
              <item>
+              <widget class="QPushButton" name="clone_route">
+               <property name="text">
+                <string>Clone</string>
+               </property>
+              </widget>
+             </item>
+             <item>
               <widget class="QPushButton" name="edit_route">
                <property name="text">
                 <string>Edit</string>
@@ -430,7 +580,7 @@ For more information, see the document &quot;Configuration/DNS&quot;.</string>
         </sizepolicy>
        </property>
        <property name="standardButtons">
-        <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
+        <set>QDialogButtonBox::StandardButton::Cancel|QDialogButtonBox::StandardButton::Ok</set>
        </property>
       </widget>
      </item>
@@ -447,7 +597,6 @@ For more information, see the document &quot;Configuration/DNS&quot;.</string>
   <tabstop>remote_dns_strategy</tabstop>
   <tabstop>direct_dns</tabstop>
   <tabstop>direct_dns_strategy</tabstop>
-  <tabstop>dns_routing</tabstop>
   <tabstop>dns_final_out</tabstop>
   <tabstop>use_dns_object</tabstop>
   <tabstop>format_dns_object</tabstop>

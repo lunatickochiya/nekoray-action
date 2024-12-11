@@ -2,17 +2,21 @@ package main
 
 import (
 	"context"
+	"github.com/sagernet/sing-box/common/settings"
+	"github.com/sagernet/sing/common/metadata"
 	"net"
 	"net/http"
 
-	"github.com/Mahdi-zarei/sing-box-extra/boxapi"
-	"github.com/Mahdi-zarei/sing-box-extra/boxbox"
-	"github.com/Mahdi-zarei/sing-box-extra/boxmain"
 	"github.com/matsuridayo/libneko/neko_common"
 	"github.com/matsuridayo/libneko/neko_log"
+	"nekobox_core/internal/boxapi"
+	"nekobox_core/internal/boxbox"
+	"nekobox_core/internal/boxmain"
 )
 
 var instance *boxbox.Box
+var systemProxyController settings.SystemProxy
+var systemProxyAddr metadata.Socksaddr
 var instance_cancel context.CancelFunc
 
 func setupCore() {

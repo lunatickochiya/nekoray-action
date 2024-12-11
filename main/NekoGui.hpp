@@ -14,9 +14,14 @@ namespace NekoGui {
 
     QString FindNekoBoxCoreRealPath();
 
-    bool IsAdmin();
+    bool IsAdmin(bool forceRenew=false);
+
+    QString GetBasePath();
+
+    bool NeedGeoAssets();
 } // namespace NekoGui
 
 #define IS_NEKO_BOX (NekoGui::coreType == NekoGui::CoreType::SING_BOX)
-#define ROUTES_PREFIX_NAME QString(IS_NEKO_BOX ? "routes_box" : "routes")
+#define ROUTES_PREFIX_NAME QString("route_profiles")
 #define ROUTES_PREFIX QString(ROUTES_PREFIX_NAME + "/")
+#define RULE_SETS_DIR QString("rule_sets")

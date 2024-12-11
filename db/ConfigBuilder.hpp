@@ -16,26 +16,26 @@ namespace NekoGui {
         std::list<std::shared_ptr<NekoGui_fmt::ExternalBuildResult>> extRs;
     };
 
+    class BuildTestConfigResult {
+    public:
+        QString error;
+        QMap<int, QString> fullConfigs;
+        QMap<QString, int> tag2entID;
+        QJsonObject coreConfig;
+        QStringList outboundTags;
+    };
+
     class BuildConfigStatus {
     public:
         std::shared_ptr<BuildConfigResult> result;
         std::shared_ptr<ProxyEntity> ent;
+        int chainID = 0;
         bool forTest;
         bool forExport;
 
-        // priv
-        QList<int> globalProfiles;
-
         // xxList is V2Ray format string list
 
-        QStringList domainListDNSRemote;
         QStringList domainListDNSDirect;
-        QStringList domainListRemote;
-        QStringList domainListDirect;
-        QStringList ipListRemote;
-        QStringList ipListDirect;
-        QStringList domainListBlock;
-        QStringList ipListBlock;
 
         // config format
 
@@ -44,7 +44,9 @@ namespace NekoGui {
         QJsonArray outbounds;
     };
 
-    std::shared_ptr<BuildConfigResult> BuildConfig(const std::shared_ptr<ProxyEntity> &ent, bool forTest, bool forExport);
+    std::shared_ptr<BuildTestConfigResult> BuildTestConfig(QList<std::shared_ptr<ProxyEntity>> profiles);
+
+    std::shared_ptr<BuildConfigResult> BuildConfig(const std::shared_ptr<ProxyEntity> &ent, bool forTest, bool forExport, int chainID = 0);
 
     void BuildConfigSingBox(const std::shared_ptr<BuildConfigStatus> &status);
 
@@ -52,4 +54,6 @@ namespace NekoGui {
 
     QString BuildChainInternal(int chainId, const QList<std::shared_ptr<ProxyEntity>> &ents,
                                const std::shared_ptr<BuildConfigStatus> &status);
+
+    void BuildOutbound(const std::shared_ptr<ProxyEntity> &ent, const std::shared_ptr<BuildConfigStatus> &status, QJsonObject& outbound, const QString& tag);
 } // namespace NekoGui

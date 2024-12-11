@@ -40,15 +40,8 @@ func main() {
 			// 1. update files
 			Updater()
 			// 2. start
-			if os.Getenv("NKR_FROM_LAUNCHER") == "1" {
-				Launcher()
-			} else {
-				exec.Command("./nekoray").Start()
-			}
+			exec.Command("./nekoray").Start()
 		}
-		return
-	} else if strings.HasPrefix(strings.ToLower(exe), "launcher") {
-		Launcher()
 		return
 	}
 	log.Fatalf("wrong name")
@@ -61,7 +54,7 @@ func Copy(src string, dst string) {
 		return
 	}
 	defer srcFile.Close()
-	dstFile, err := os.Open(dst)
+	dstFile, err := os.OpenFile(dst, os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0644)
 	if err != nil {
 		log.Println(err)
 		return

@@ -8,7 +8,6 @@ namespace NekoGui_fmt {
         if (network != "tcp") {
             QJsonObject transport{{"type", network}};
             if (network == "ws") {
-                if (!host.isEmpty()) transport["headers"] = QJsonObject{{"Host", host}};
                 // ws path & ed
                 auto pathWithoutEd = SubStrBefore(path, "?ed=");
                 if (!pathWithoutEd.isEmpty()) transport["path"] = pathWithoutEd;
@@ -19,18 +18,38 @@ namespace NekoGui_fmt {
                         transport["early_data_header_name"] = "Sec-WebSocket-Protocol";
                     }
                 }
+                bool ok;
+                auto headerMap = GetHeaderPairs(&ok);
+                if (!ok) {
+                    MW_show_log("Warning: headers could not be parsed, they will not be used");
+                }
+                if (!host.isEmpty()) headerMap["Host"] = host;
+                transport["headers"] = QMapString2QJsonObject(headerMap);
                 if (ws_early_data_length > 0) {
                     transport["max_early_data"] = ws_early_data_length;
                     transport["early_data_header_name"] = ws_early_data_name;
                 }
             } else if (network == "http") {
                 if (!path.isEmpty()) transport["path"] = path;
-                if (!host.isEmpty()) transport["host"] = QList2QJsonArray(host.split(","));
+                if (!host.isEmpty()) transport["host"] = QListStr2QJsonArray(host.split(","));
+                if (!method.isEmpty()) transport["method"] = method.toUpper();
+                bool ok;
+                auto headerMap = GetHeaderPairs(&ok);
+                if (!ok) {
+                    MW_show_log("Warning: headers could not be parsed, they will not be used");
+                }
+                transport["headers"] = QMapString2QJsonObject(headerMap);
             } else if (network == "grpc") {
                 if (!path.isEmpty()) transport["service_name"] = path;
             } else if (network == "httpupgrade") {
                 if (!path.isEmpty()) transport["path"] = path;
                 if (!host.isEmpty()) transport["host"] = host;
+                bool ok;
+                auto headerMap = GetHeaderPairs(&ok);
+                if (!ok) {
+                    MW_show_log("Warning: headers could not be parsed, they will not be used");
+                }
+                transport["headers"] = QMapString2QJsonObject(headerMap);
             }
             outbound->insert("transport", transport);
         } else if (header_type == "http") {
@@ -39,12 +58,12 @@ namespace NekoGui_fmt {
                 {"type", "http"},
                 {"method", "GET"},
                 {"path", path},
-                {"headers", QJsonObject{{"Host", QList2QJsonArray(host.split(","))}}},
+                {"headers", QJsonObject{{"Host", QListStr2QJsonArray(host.split(","))}}},
             };
             outbound->insert("transport", transport);
         }
 
-        // 对应字段 tls
+        // tls
         if (security == "tls") {
             QJsonObject tls{{"enabled", true}};
             if (allow_insecure || NekoGui::dataStore->skip_cert) tls["insecure"] = true;
@@ -53,22 +72,38 @@ namespace NekoGui_fmt {
                 tls["certificate"] = certificate.trimmed();
             }
             if (!alpn.trimmed().isEmpty()) {
-                tls["alpn"] = QList2QJsonArray(alpn.split(","));
+                tls["alpn"] = QListStr2QJsonArray(alpn.split(","));
             }
             QString fp = utlsFingerprint;
-            if (!reality_pbk.trimmed().isEmpty()) {
-                tls["reality"] = QJsonObject{
-                    {"enabled", true},
-                    {"public_key", reality_pbk},
-                    {"short_id", reality_sid.split(",")[0]},
-                };
-                if (fp.isEmpty()) fp = "random";
-            }
             if (!fp.isEmpty()) {
                 tls["utls"] = QJsonObject{
                     {"enabled", true},
                     {"fingerprint", fp},
                 };
+            }
+            outbound->insert("tls", tls);
+        } else if (security == "reality") {
+            QJsonObject tls{{"enabled", true}};
+            if (allow_insecure || NekoGui::dataStore->skip_cert) tls["insecure"] = true;
+            if (!sni.trimmed().isEmpty()) tls["server_name"] = sni;
+            if (!certificate.trimmed().isEmpty()) {
+                tls["certificate"] = certificate.trimmed();
+            }
+            if (!alpn.trimmed().isEmpty()) {
+                tls["alpn"] = QListStr2QJsonArray(alpn.split(","));
+            }
+            tls["reality"] = QJsonObject{
+                                {"enabled", true},
+                                {"public_key", reality_pbk},
+                                {"short_id", reality_sid.split(",")[0]},
+                            };
+            QString fp = utlsFingerprint;
+            if (fp.isEmpty()) fp = "random";
+            if (!fp.isEmpty()) {
+                tls["utls"] = QJsonObject{
+                        {"enabled", true},
+                        {"fingerprint", fp},
+                    };
             }
             outbound->insert("tls", tls);
         }
@@ -182,7 +217,7 @@ namespace NekoGui_fmt {
             {"certificate", caText.trimmed()},
             {"server_name", sni},
         };
-        if (!alpn.trimmed().isEmpty()) coreTlsObj["alpn"] = QList2QJsonArray(alpn.split(","));
+        if (!alpn.trimmed().isEmpty()) coreTlsObj["alpn"] = QListStr2QJsonArray(alpn.split(","));
         if (proxy_type == proxy_Hysteria2) coreTlsObj["alpn"] = "h3";
 
         QJsonObject outbound{
@@ -227,6 +262,55 @@ namespace NekoGui_fmt {
             outbound["zero_rtt_handshake"] = zeroRttHandshake;
             if (!heartbeat.trimmed().isEmpty()) outbound["heartbeat"] = heartbeat;
         }
+
+        result.outbound = outbound;
+        return result;
+    }
+
+    CoreObjOutboundBuildResult WireguardBean::BuildCoreObjSingBox() {
+        CoreObjOutboundBuildResult result;
+
+        auto tun_name = "nekoray-wg";
+#ifdef Q_OS_MACOS
+        tun_name = "uwg9";
+#endif
+
+        QJsonObject outbound{
+            {"type", "wireguard"},
+            {"server", serverAddress},
+            {"server_port", serverPort},
+            {"interface_name", tun_name},
+            {"local_address", QListStr2QJsonArray(localAddress)},
+            {"private_key", privateKey},
+            {"peer_public_key", publicKey},
+            {"pre_shared_key", preSharedKey},
+            {"reserved", QListInt2QJsonArray(reserved)},
+            {"mtu", MTU},
+            {"gso", enableGSO},
+            {"system_interface", useSystemInterface},
+            {"workers", workerCount}
+        };
+
+        result.outbound = outbound;
+        return result;
+    }
+
+    CoreObjOutboundBuildResult SSHBean::BuildCoreObjSingBox(){
+        CoreObjOutboundBuildResult result;
+
+        QJsonObject outbound{
+            {"type", "ssh"},
+            {"server", serverAddress},
+            {"server_port", serverPort},
+            {"user", user},
+            {"password", password},
+        };
+        if (!privateKey.isEmpty()) outbound["private_key"] = privateKey;
+        if (!privateKeyPath.isEmpty()) outbound["private_key_path"] = privateKeyPath;
+        if (!privateKeyPass.isEmpty()) outbound["private_key_passphrase"] = privateKeyPass;
+        if (!hostKey.isEmpty()) outbound["host_key"] = QListStr2QJsonArray(hostKey);
+        if (!hostKeyAlgs.isEmpty()) outbound["host_key_algorithms"] = QListStr2QJsonArray(hostKeyAlgs);
+        if (!clientVersion.isEmpty()) outbound["client_version"] = clientVersion;
 
         result.outbound = outbound;
         return result;

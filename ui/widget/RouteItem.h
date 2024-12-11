@@ -2,9 +2,12 @@
 
 #include <QWidget>
 #include <QListWidgetItem>
-#include <QGroupBox>
+#include <QDialog>
+#include <QStringListModel>
+#include <QShortcut>
 
 #include "db/RouteEntity.h"
+#include "3rdparty/qv2ray/v2/ui/QvAutoCompleteTextEdit.hpp"
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -12,7 +15,7 @@ namespace Ui {
 }
 QT_END_NAMESPACE
 
-class RouteItem : public QGroupBox {
+class RouteItem : public QDialog {
     Q_OBJECT
 
 public:
@@ -21,27 +24,42 @@ public:
 
     std::shared_ptr<NekoGui::RoutingChain> chain;
 signals:
-    void settingsChanged(const std::shared_ptr<NekoGui::RoutingChain> routeChain);
+    void settingsChanged(std::shared_ptr<NekoGui::RoutingChain> routingChain);
 
 private:
     Ui::RouteItem *ui;
     int currentIndex = -1;
 
-    int lastNum;
+    int lastNum = 0;
+
+    QStringList geo_items;
+
+    AutoCompleteTextEdit* rule_set_editor;
+
+    QStringList current_helper_items;
+
+    QStringListModel* helperModel;
+
+    QShortcut* deleteShortcut;
+
+    std::map<int,int> outboundMap;
 
     [[nodiscard]] int getIndexOf(const QString& name) const;
 
     void showSelectItem(const QStringList& items, const QString& currentItem);
 
-    void showTextEnterItem(const QStringList& items);
+    void showTextEnterItem(const QStringList& items, bool isRuleSet);
 
     void setDefaultRuleData(const QString& currentData);
 
-    void updateRouteItemsView();
+    void updateRuleSection();
 
+    void updateRulePreview();
+
+    void updateRouteItemsView();
 private slots:
-    void on_ok_button_clicked();
-    void on_cancel_button_clicked();
+    void accept() override;
+
     void on_new_route_item_clicked();
     void on_moveup_route_item_clicked();
     void on_movedown_route_item_clicked();

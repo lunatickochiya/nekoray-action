@@ -10,6 +10,8 @@ namespace QtGrpc {
 }
 
 namespace NekoGui_rpc {
+    enum GeoRuleSetType {ip, site};
+
     class Client {
     public:
         explicit Client(std::function<void(const QString &)> onError, const QString &target, const QString &token);
@@ -26,7 +28,19 @@ namespace NekoGui_rpc {
 
         libcore::TestResp Test(bool *rpcOK, const libcore::TestReq &request);
 
+        void StopTests(bool *rpcOK);
+
         libcore::UpdateResp Update(bool *rpcOK, const libcore::UpdateReq &request);
+
+        QStringList GetGeoList(bool *rpcOK, GeoRuleSetType mode, const QString& basePath);
+
+        QString CompileGeoSet(bool *rpcOK, GeoRuleSetType mode, std::string category, const QString& basePath);
+
+        QString SetSystemProxy(bool *rpcOK, bool enable);
+
+        libcore::GetSystemDNSResponse GetSystemDNS(bool *rpcOK) const;
+
+        QString SetSystemDNS(bool *rpcOK, const QStringList& servers, bool dhcp, bool clear) const;
 
     private:
         std::function<std::unique_ptr<QtGrpc::Http2GrpcChannelPrivate>()> make_grpc_channel;

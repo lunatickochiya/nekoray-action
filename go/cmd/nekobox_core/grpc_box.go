@@ -4,19 +4,21 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/sagernet/sing-box/common/settings"
+	"github.com/sagernet/sing/common/metadata"
+	"nekobox_core/internal/boxbox"
+	"os"
+	"strings"
 	"time"
 
 	"grpc_server"
 	"grpc_server/gen"
 
-	"github.com/Mahdi-zarei/sing-box-extra/boxapi"
-	"github.com/Mahdi-zarei/sing-box-extra/boxbox"
-	"github.com/Mahdi-zarei/sing-box-extra/boxmain"
 	"github.com/matsuridayo/libneko/neko_common"
 	"github.com/matsuridayo/libneko/neko_log"
-	"github.com/matsuridayo/libneko/speedtest"
-
 	"log"
+	"nekobox_core/internal/boxapi"
+	"nekobox_core/internal/boxmain"
 
 	"github.com/sagernet/sing-box/option"
 )
@@ -45,7 +47,7 @@ func (s *server) Start(ctx context.Context, in *gen.LoadConfigReq) (out *gen.Err
 		return
 	}
 
-	instance, instance_cancel, err = boxmain.Create([]byte(in.CoreConfig), false)
+	instance, instance_cancel, err = boxmain.Create([]byte(in.CoreConfig))
 
 	if instance != nil {
 		// Logger
@@ -83,53 +85,66 @@ func (s *server) Stop(ctx context.Context, in *gen.EmptyReq) (out *gen.ErrorResp
 	return
 }
 
-func (s *server) Test(ctx context.Context, in *gen.TestReq) (out *gen.TestResp, _ error) {
+func (s *server) Test(ctx context.Context, in *gen.TestReq) (*gen.TestResp, error) {
+	var testInstance *boxbox.Box
+	var cancel context.CancelFunc
 	var err error
-	out = &gen.TestResp{Ms: 0}
-
-	defer func() {
+	var twice = true
+	if in.TestCurrent {
+		if instance == nil {
+			return &gen.TestResp{Results: []*gen.URLTestResp{{
+				OutboundTag: "proxy",
+				LatencyMs:   0,
+				Error:       "Instance is not running",
+			}}}, nil
+		}
+		testInstance = instance
+		twice = false
+	} else {
+		testInstance, cancel, err = boxmain.Create([]byte(in.Config))
 		if err != nil {
-			out.Error = err.Error()
+			return nil, err
 		}
-	}()
-
-	if in.Mode == gen.TestMode_UrlTest {
-		var i *boxbox.Box
-		var cancel context.CancelFunc
-		if in.Config != nil {
-			// Test instance
-			i, cancel, err = boxmain.Create([]byte(in.Config.CoreConfig), true)
-			if i != nil {
-				defer i.Close()
-				defer cancel()
-			}
-			if err != nil {
-				return
-			}
-		} else {
-			// Test running instance
-			i = instance
-			if i == nil {
-				return
-			}
-		}
-		// Latency
-		out.Ms, err = speedtest.UrlTest(boxapi.CreateProxyHttpClient(i), in.Url, in.Timeout)
-	} else if in.Mode == gen.TestMode_TcpPing {
-		out.Ms, err = speedtest.TcpPing(in.Address, in.Timeout)
-	} else if in.Mode == gen.TestMode_FullTest {
-		i, cancel, err := boxmain.Create([]byte(in.Config.CoreConfig), true)
-		if i != nil {
-			defer i.Close()
-			defer cancel()
-		}
-		if err != nil {
-			return
-		}
-		return grpc_server.DoFullTest(ctx, in, i)
+		defer cancel()
+		defer testInstance.Close()
 	}
 
-	return
+	outboundTags := in.OutboundTags
+	if in.UseDefaultOutbound || in.TestCurrent {
+		outbound, err := testInstance.Router().DefaultOutbound("tcp")
+		if err != nil {
+			return nil, err
+		}
+		outboundTags = []string{outbound.Tag()}
+	}
+
+	var maxConcurrency = in.MaxConcurrency
+	if maxConcurrency >= 500 || maxConcurrency == 0 {
+		maxConcurrency = MaxConcurrentTests
+	}
+	results := BatchURLTest(testCtx, testInstance, outboundTags, in.Url, int(maxConcurrency), twice)
+
+	res := make([]*gen.URLTestResp, 0)
+	for idx, data := range results {
+		errStr := ""
+		if data.Error != nil {
+			errStr = data.Error.Error()
+		}
+		res = append(res, &gen.URLTestResp{
+			OutboundTag: outboundTags[idx],
+			LatencyMs:   int32(data.Duration.Milliseconds()),
+			Error:       errStr,
+		})
+	}
+
+	return &gen.TestResp{Results: res}, nil
+}
+
+func (s *server) StopTest(ctx context.Context, in *gen.EmptyReq) (*gen.EmptyResp, error) {
+	cancelTests()
+	testCtx, cancelTests = context.WithCancel(context.Background())
+
+	return &gen.EmptyResp{}, nil
 }
 
 func (s *server) QueryStats(ctx context.Context, in *gen.QueryStatsReq) (out *gen.QueryStatsResp, _ error) {
@@ -149,4 +164,77 @@ func (s *server) ListConnections(ctx context.Context, in *gen.EmptyReq) (*gen.Li
 		// TODO upstream api
 	}
 	return out, nil
+}
+
+func (s *server) GetGeoIPList(ctx context.Context, in *gen.GeoListRequest) (*gen.GetGeoIPListResponse, error) {
+	resp, err := boxmain.ListGeoip(in.Path + string(os.PathSeparator) + "geoip.db")
+	if err != nil {
+		return nil, err
+	}
+
+	res := make([]string, 0)
+	for _, r := range resp {
+		r += "_IP"
+		res = append(res, r)
+	}
+
+	return &gen.GetGeoIPListResponse{Items: res}, nil
+}
+
+func (s *server) GetGeoSiteList(ctx context.Context, in *gen.GeoListRequest) (*gen.GetGeoSiteListResponse, error) {
+	resp, err := boxmain.GeositeList(in.Path + string(os.PathSeparator) + "geosite.db")
+	if err != nil {
+		return nil, err
+	}
+
+	res := make([]string, 0)
+	for _, r := range resp {
+		r += "_SITE"
+		res = append(res, r)
+	}
+
+	return &gen.GetGeoSiteListResponse{Items: res}, nil
+}
+
+func (s *server) CompileGeoIPToSrs(ctx context.Context, in *gen.CompileGeoIPToSrsRequest) (*gen.EmptyResp, error) {
+	category := strings.TrimSuffix(in.Item, "_IP")
+	err := boxmain.CompileRuleSet(in.Path+string(os.PathSeparator)+"geoip.db", category, boxmain.IpRuleSet, "./rule_sets/"+in.Item+".srs")
+	if err != nil {
+		return nil, err
+	}
+
+	return &gen.EmptyResp{}, nil
+}
+
+func (s *server) CompileGeoSiteToSrs(ctx context.Context, in *gen.CompileGeoSiteToSrsRequest) (*gen.EmptyResp, error) {
+	category := strings.TrimSuffix(in.Item, "_SITE")
+	err := boxmain.CompileRuleSet(in.Path+string(os.PathSeparator)+"geosite.db", category, boxmain.SiteRuleSet, "./rule_sets/"+in.Item+".srs")
+	if err != nil {
+		return nil, err
+	}
+
+	return &gen.EmptyResp{}, nil
+}
+
+func (s *server) SetSystemProxy(ctx context.Context, in *gen.SetSystemProxyRequest) (*gen.EmptyResp, error) {
+	var err error
+	addr := metadata.ParseSocksaddr(in.Address)
+	if systemProxyController == nil || systemProxyAddr.String() != addr.String() {
+		systemProxyController, err = settings.NewSystemProxy(context.Background(), addr, true)
+		if err != nil {
+			return nil, err
+		}
+		systemProxyAddr = addr
+	}
+	if in.Enable && !systemProxyController.IsEnabled() {
+		err = systemProxyController.Enable()
+	}
+	if !in.Enable && systemProxyController.IsEnabled() {
+		err = systemProxyController.Disable()
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return &gen.EmptyResp{}, nil
 }

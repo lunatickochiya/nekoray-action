@@ -8,15 +8,20 @@
 #include <QLocalSocket>
 #include <QLocalServer>
 #include <QThread>
+#include <3rdparty/WinCommander.hpp>
 
 #include "3rdparty/RunGuard.hpp"
 #include "main/NekoGui.hpp"
 
 #include "ui/mainwindow_interface.h"
-#include "ui/dialog_first_setup.h"
 
 #ifdef Q_OS_WIN
 #include "sys/windows/MiniDump.h"
+#pragma comment (lib, "cpr.lib")
+#pragma comment (lib, "libcurl.lib")
+#pragma comment (lib, "Ws2_32.lib")
+#pragma comment (lib, "Wldap32.lib")
+#pragma comment (lib, "Crypt32.lib")
 #endif
 
 void signal_handler(int signum) {
@@ -57,13 +62,7 @@ int main(int argc, char* argv[]) {
     Windows_SetCrashHandler();
 #endif
 
-    // pre-init QApplication
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0) && QT_VERSION >= QT_VERSION_CHECK(5, 10, 0)
-    QApplication::setAttribute(Qt::AA_DisableWindowContextHelpButton);
-#endif
-#if QT_VERSION >= QT_VERSION_CHECK(5, 7, 0)
     QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
-#endif
     QApplication::setQuitOnLastWindowClosed(false);
     auto preQApp = new QApplication(argc, argv);
 
@@ -72,11 +71,6 @@ int main(int argc, char* argv[]) {
     if (QFile::exists("updater.old")) {
         QFile::remove("updater.old");
     }
-#ifndef Q_OS_WIN
-    if (!QFile::exists("updater")) {
-        QFile::link("launcher", "updater");
-    }
-#endif
 
     // Flags
     NekoGui::dataStore->argv = QApplication::arguments();
@@ -91,6 +85,7 @@ int main(int argc, char* argv[]) {
     if (NekoGui::dataStore->argv.contains("-tray")) NekoGui::dataStore->flag_tray = true;
     if (NekoGui::dataStore->argv.contains("-debug")) NekoGui::dataStore->flag_debug = true;
     if (NekoGui::dataStore->argv.contains("-flag_restart_tun_on")) NekoGui::dataStore->flag_restart_tun_on = true;
+    if (NekoGui::dataStore->argv.contains("-flag_restart_dns_set")) NekoGui::dataStore->flag_dns_set = true;
     if (NekoGui::dataStore->argv.contains("-flag_reorder")) NekoGui::dataStore->flag_reorder = true;
 #ifdef NKR_CPP_USE_APPDATA
     NekoGui::dataStore->flag_use_appdata = true; // Example: Package & MacOS
@@ -117,6 +112,10 @@ int main(int argc, char* argv[]) {
     // init QApplication
     delete preQApp;
     QApplication a(argc, argv);
+
+#ifdef Q_OS_LINUX
+    QApplication::addLibraryPath(QApplication::applicationDirPath() + "/usr/plugins");
+#endif
 
     // dispatchers
     DS_cores = new QThread;
@@ -147,12 +146,10 @@ int main(int argc, char* argv[]) {
     MF_release_runguard = [&] { guard.release(); };
 
 // icons
-#if (QT_VERSION >= QT_VERSION_CHECK(5, 11, 0))
     QIcon::setFallbackSearchPaths(QStringList{
         ":/nekoray",
         ":/icon",
     });
-#endif
 
     // icon for no theme
     if (QIcon::themeName().isEmpty()) {
@@ -187,31 +184,38 @@ int main(int argc, char* argv[]) {
     if (!dir.exists(ROUTES_PREFIX_NAME)) {
         dir_success &= dir.mkdir(ROUTES_PREFIX_NAME);
     }
+    if (!dir.exists(RULE_SETS_DIR)) {
+        dir_success &= dir.mkdir(RULE_SETS_DIR);
+    }
     if (!dir_success) {
         QMessageBox::warning(nullptr, "Error", "No permission to write " + dir.absolutePath());
         return 1;
     }
 
     // Load dataStore
-    switch (NekoGui::coreType) {
-        case NekoGui::CoreType::SING_BOX:
-            NekoGui::dataStore->fn = "groups/nekobox.json";
-            break;
-        default:
-            MessageBoxWarning("Error", "Unknown coreType.");
-            return 0;
-    }
+    NekoGui::dataStore->fn = "groups/nekobox.json";
     auto isLoaded = NekoGui::dataStore->Load();
     if (!isLoaded) {
         NekoGui::dataStore->Save();
     }
+
+#ifdef Q_OS_WIN
+    if (NekoGui::dataStore->windows_set_admin && !NekoGui::IsAdmin())
+    {
+        NekoGui::dataStore->windows_set_admin = false; // so that if permission denied, we will run as user on the next run
+        NekoGui::dataStore->Save();
+        WinCommander::runProcessElevated(QApplication::applicationFilePath(), {}, "", WinCommander::SW_NORMAL, false);
+        QApplication::quit();
+        return 0;
+    }
+#endif
 
     // Datastore & Flags
     if (NekoGui::dataStore->start_minimal) NekoGui::dataStore->flag_tray = true;
 
     // load routing
     NekoGui::dataStore->routing = std::make_unique<NekoGui::Routing>();
-    NekoGui::dataStore->routing->fn = ROUTES_PREFIX + NekoGui::dataStore->active_routing;
+    NekoGui::dataStore->routing->fn = ROUTES_PREFIX + "Default";
     isLoaded = NekoGui::dataStore->routing->Load();
     if (!isLoaded) {
         NekoGui::dataStore->routing->Save();
@@ -236,6 +240,15 @@ int main(int argc, char* argv[]) {
     }
     QGuiApplication::tr("QT_LAYOUT_DIRECTION");
     loadTranslate(locale);
+
+    if (!NekoGui::dataStore->font.isEmpty()) {
+        qApp->setFont(NekoGui::dataStore->font);
+    }
+    if (NekoGui::dataStore->font_size != 0) {
+        auto font = qApp->font();
+        font.setPointSize(NekoGui::dataStore->font_size);
+        qApp->setFont(font);
+    }
 
     // Signals
     signal(SIGTERM, signal_handler);

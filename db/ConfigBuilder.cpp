@@ -2,13 +2,12 @@
 #include "db/Database.hpp"
 #include "fmt/includes.h"
 #include "fmt/Preset.hpp"
-#include "main/QJS.hpp"
+#include "rpc/gRPC.h"
 
 #include <QApplication>
 #include <QFile>
 #include <QFileInfo>
 
-#define BOX_UNDERLYING_DNS dataStore->core_box_underlying_dns.isEmpty() ? "underlying://0.0.0.0" : dataStore->core_box_underlying_dns
 #define BOX_UNDERLYING_DNS_EXPORT dataStore->core_box_underlying_dns.isEmpty() ? (status->forExport ? "local" : "underlying://0.0.0.0") : dataStore->core_box_underlying_dns
 
 namespace NekoGui {
@@ -25,6 +24,9 @@ namespace NekoGui {
 
     QString genTunName() {
         auto tun_name = "nekoray-tun";
+#ifdef Q_OS_MACOS
+        tun_name = "utun9";
+#endif
         return tun_name;
     }
 
@@ -49,15 +51,18 @@ namespace NekoGui {
         }
     }
 
+
+
     // Common
 
-    std::shared_ptr<BuildConfigResult> BuildConfig(const std::shared_ptr<ProxyEntity> &ent, bool forTest, bool forExport) {
+    std::shared_ptr<BuildConfigResult> BuildConfig(const std::shared_ptr<ProxyEntity> &ent, bool forTest, bool forExport, int chainID) {
         auto result = std::make_shared<BuildConfigResult>();
         auto status = std::make_shared<BuildConfigStatus>();
         status->ent = ent;
         status->result = result;
         status->forTest = forTest;
         status->forExport = forExport;
+        status->chainID = chainID;
 
         auto customBean = dynamic_cast<NekoGui_fmt::CustomBean *>(ent->bean.get());
         if (customBean != nullptr && customBean->core == "internal-full") {
@@ -69,20 +74,97 @@ namespace NekoGui {
         // apply custom config
         MergeJson(QString2QJsonObject(ent->bean->custom_config), result->coreConfig);
 
-        // hook.js
-        if (result->error.isEmpty() && !forTest) {
-            auto source = qjs::ReadHookJS();
-            if (!source.isEmpty()) {
-                qjs::QJS js(source);
-                auto js_result = js.EvalFunction("hook.hook_core_config", QJsonObject2QString(result->coreConfig, true));
-                auto js_result_json = QString2QJsonObject(js_result);
-                if (!js_result_json.isEmpty() && result->coreConfig != js_result_json) {
-                    MW_show_log("hook.js modified your " + software_core_name + " json config.");
-                    result->coreConfig = js_result_json;
+        return result;
+    }
+
+    std::shared_ptr<BuildTestConfigResult> BuildTestConfig(QList<std::shared_ptr<ProxyEntity>> profiles) {
+        auto results = std::make_shared<BuildTestConfigResult>();
+
+        auto idx = 1;
+        QJsonArray outboundArray = {
+            QJsonObject{
+                {"type", "direct"},
+                {"tag", "direct"}
+            },
+            QJsonObject{
+                {"type", "block"},
+                {"tag", "block"}
+            },
+            QJsonObject{
+                {"type", "dns"},
+                {"tag", "dns-out"}
+            }
+        };
+        int index = 0;
+
+        QJsonArray directDomainArray;
+        for (const auto &item: profiles) {
+            if (!item->bean->IsValid()) {
+                MW_show_log("Skipping invalid config: " + item->bean->name);
+                item->latency = -1;
+                continue;
+            }
+            auto res = BuildConfig(item, true, false, ++index);
+            if (!res->error.isEmpty()) {
+                results->error = res->error;
+                return results;
+            }
+            if (item->type == "custom" && item->CustomBean()->core == "internal-full") {
+                res->coreConfig["inbounds"] = QJsonArray();
+                results->fullConfigs[item->id] = QJsonObject2QString(res->coreConfig, true);
+                continue;
+            }
+
+            // not full config, process it
+            if (results->coreConfig.isEmpty()) {
+                results->coreConfig = res->coreConfig;
+            }
+            // add the direct dns domains
+            for (const auto &rule: res->coreConfig["dns"].toObject()["rules"].toArray()) {
+                if (rule.toObject().contains("domain")) {
+                    for (const auto &domain: rule.toObject()["domain"].toArray()) {
+                        directDomainArray.append(domain);
+                    }
                 }
             }
+            // now we add the outbounds of the current config to the final one
+            auto outbounds = res->coreConfig["outbounds"].toArray();
+            if (outbounds.isEmpty()) {
+                results->error = QString("outbounds is empty for %1").arg(item->bean->name);
+                return results;
+            }
+            for (const auto &outboundRef: outbounds) {
+                auto outbound = outboundRef.toObject();
+                if (outbound["tag"] == "direct" || outbound["tag"] == "block" || outbound["tag"] == "dns-out" || outbound["tag"].toString().startsWith("rout")) continue;
+                if (outbound["tag"] == "proxy") {
+                    QString tag = "proxy";
+                    if (index > 1) tag += Int2String(index);
+                    outbound.insert("tag", tag);
+                    outboundArray.append(outbound);
+                    results->outboundTags << tag;
+                    results->tag2entID.insert(tag, item->id);
+                    continue;
+                }
+                outboundArray.append(outbound);
+            }
         }
-        return result;
+
+        results->coreConfig["outbounds"] = outboundArray;
+        auto dnsObj = results->coreConfig["dns"].toObject();
+        auto dnsRulesObj = QJsonArray();
+        if (!directDomainArray.empty()) {
+            dnsRulesObj += QJsonObject{
+                {"domain", directDomainArray},
+                {"server", "dns-direct"}
+            };
+        }
+        dnsObj["rules"] = dnsRulesObj;
+        results->coreConfig["dns"] = dnsObj;
+        results->coreConfig["route"] = QJsonObject{
+            {"auto_detect_interface", true}
+        };
+
+        return results;
     }
 
     QString BuildChain(int chainId, const std::shared_ptr<BuildConfigStatus> &status) {
@@ -139,7 +221,7 @@ namespace NekoGui {
         }
 
         // BuildChain
-        QString chainTagOut = BuildChainInternal(0, ents, status);
+        QString chainTagOut = BuildChainInternal(chainId, ents, status);
 
         // Chain ent traffic stat
         if (ents.length() > 1) {
@@ -151,35 +233,10 @@ namespace NekoGui {
         return chainTagOut;
     }
 
-#define DOMAIN_USER_RULE                                                             \
-    for (const auto &line: SplitLinesSkipSharp(dataStore->routing->proxy_domain)) {  \
-        if (dataStore->routing->dns_routing) status->domainListDNSRemote += line;    \
-        status->domainListRemote += line;                                            \
-    }                                                                                \
-    for (const auto &line: SplitLinesSkipSharp(dataStore->routing->direct_domain)) { \
-        if (dataStore->routing->dns_routing) status->domainListDNSDirect += line;    \
-        status->domainListDirect += line;                                            \
-    }                                                                                \
-    for (const auto &line: SplitLinesSkipSharp(dataStore->routing->block_domain)) {  \
-        status->domainListBlock += line;                                             \
-    }
-
-#define IP_USER_RULE                                                             \
-    for (const auto &line: SplitLinesSkipSharp(dataStore->routing->block_ip)) {  \
-        status->ipListBlock += line;                                             \
-    }                                                                            \
-    for (const auto &line: SplitLinesSkipSharp(dataStore->routing->proxy_ip)) {  \
-        status->ipListRemote += line;                                            \
-    }                                                                            \
-    for (const auto &line: SplitLinesSkipSharp(dataStore->routing->direct_ip)) { \
-        status->ipListDirect += line;                                            \
-    }
-
     QString BuildChainInternal(int chainId, const QList<std::shared_ptr<ProxyEntity>> &ents,
                                const std::shared_ptr<BuildConfigStatus> &status) {
         QString chainTag = "c-" + Int2String(chainId);
         QString chainTagOut;
-        bool muxApplied = false;
 
         QString pastTag;
         int pastExternalStat = 0;
@@ -190,34 +247,19 @@ namespace NekoGui {
             // profile2 (in) (global)   tag g-(id)
             // profile1                 tag (chainTag)-(id)
             // profile0 (out)           tag (chainTag)-(id) / single: chainTag=g-(id)
-            auto tagOut = chainTag + "-" + Int2String(ent->id);
-
-            // needGlobal: can only contain one?
-            bool needGlobal = false;
+            auto tagOut = chainTag + "-" + Int2String(ent->id) + "-" + Int2String(index);
 
             // first profile set as global
             auto isFirstProfile = index == ents.length() - 1;
-            if (isFirstProfile) {
-                needGlobal = true;
-                tagOut = "g-" + Int2String(ent->id);
-            }
 
             // last profile set as "proxy"
-            if (chainId == 0 && index == 0) {
-                needGlobal = false;
+            if (index == 0) {
                 tagOut = "proxy";
             }
 
             // ignoreConnTag
             if (index != 0) {
                 status->result->ignoreConnTag << tagOut;
-            }
-
-            if (needGlobal) {
-                if (status->globalProfiles.contains(ent->id)) {
-                    continue;
-                }
-                status->globalProfiles += ent->id;
             }
 
             if (index > 0) {
@@ -290,7 +332,6 @@ namespace NekoGui {
             // Outbound
 
             QJsonObject outbound;
-            auto stream = GetStreamSettings(ent->bean.get());
 
             if (thisExternalStat > 0) {
                 auto extR = ent->bean->BuildExternal(ext_mapping_port, ext_socks_port, thisExternalStat);
@@ -309,70 +350,13 @@ namespace NekoGui {
                 outbound["type"] = "socks";
                 outbound["server"] = "127.0.0.1";
                 outbound["server_port"] = ext_socks_port;
+                // outbound misc
+                outbound["tag"] = tagOut;
+                ent->traffic_data->id = ent->id;
+                ent->traffic_data->tag = tagOut.toStdString();
+                status->result->outboundStats += ent->traffic_data;
             } else {
-                const auto coreR = ent->bean->BuildCoreObjSingBox();
-                if (coreR.outbound.isEmpty()) {
-                    status->result->error = "unsupported outbound";
-                    return {};
-                }
-                if (!coreR.error.isEmpty()) { // rejected
-                    status->result->error = coreR.error;
-                    return {};
-                }
-                outbound = coreR.outbound;
-            }
-
-            // outbound misc
-            outbound["tag"] = tagOut;
-            ent->traffic_data->id = ent->id;
-            ent->traffic_data->tag = tagOut.toStdString();
-            status->result->outboundStats += ent->traffic_data;
-
-            // mux common
-            auto needMux = ent->type == "vmess" || ent->type == "trojan" || ent->type == "vless" || ent->type == "shadowsocks";
-            needMux &= dataStore->mux_concurrency > 0;
-
-            if (stream != nullptr) {
-                if (stream->network == "grpc" || stream->network == "quic" || (stream->network == "http" && stream->security == "tls")) {
-                    needMux = false;
-                }
-            }
-
-            auto mux_state = ent->bean->mux_state;
-            if (mux_state == 0) {
-                if (!dataStore->mux_default_on && !ent->bean->enable_brutal) needMux = false;
-            } else if (mux_state == 1) {
-                needMux = true;
-            } else if (mux_state == 2) {
-                needMux = false;
-            }
-
-            if (ent->type == "vless" && outbound["flow"] != "") {
-                needMux = false;
-            }
-
-            // common
-            // apply domain_strategy
-            outbound["domain_strategy"] = dataStore->routing->outbound_domain_strategy;
-            // apply mux
-            if (!muxApplied && needMux) {
-                auto muxObj = QJsonObject{
-                    {"enabled", true},
-                    {"protocol", dataStore->mux_protocol},
-                    {"padding", dataStore->mux_padding},
-                    {"max_streams", dataStore->mux_concurrency},
-                };
-                if (ent->bean->enable_brutal) {
-                    auto brutalObj = QJsonObject{
-                        {"enabled", true},
-                        {"up_mbps", ent->bean->brutal_speed},
-                        {"down_mbps", ent->bean->brutal_speed},
-                    };
-                    muxObj["max_connections"] = 1;
-                    muxObj["brutal"] = brutalObj;
-                }
-                outbound["multiplex"] = muxObj;
-                muxApplied = true;
+                BuildOutbound(ent, status, outbound, tagOut);
             }
 
             // apply custom outbound settings
@@ -388,7 +372,7 @@ namespace NekoGui {
             }
 
             if (!IsIpAddress(serverAddress)) {
-                status->domainListDNSDirect += "full:" + serverAddress;
+                status->domainListDNSDirect += serverAddress;
             }
 
             status->outbounds += outbound;
@@ -400,12 +384,83 @@ namespace NekoGui {
         return chainTagOut;
     }
 
+    void BuildOutbound(const std::shared_ptr<ProxyEntity> &ent, const std::shared_ptr<BuildConfigStatus> &status, QJsonObject& outbound, const QString& tag) {
+        if (ent->type == "wireguard") {
+            if (ent->WireguardBean()->useSystemInterface && !NekoGui::IsAdmin()) {
+                MW_dialog_message("configBuilder" ,"NeedAdmin");
+                status->result->error = "using wireguard system interface requires elevated permissions";
+                return;
+            }
+        }
+
+        const auto coreR = ent->bean->BuildCoreObjSingBox();
+        if (coreR.outbound.isEmpty()) {
+            status->result->error = "unsupported outbound";
+            return;
+        }
+        if (!coreR.error.isEmpty()) { // rejected
+            status->result->error = coreR.error;
+            return;
+        }
+        outbound = coreR.outbound;
+
+        // outbound misc
+        outbound["tag"] = tag;
+        ent->traffic_data->id = ent->id;
+        ent->traffic_data->tag = tag.toStdString();
+        status->result->outboundStats += ent->traffic_data;
+
+        // mux common
+        auto needMux = ent->type == "vmess" || ent->type == "trojan" || ent->type == "vless" || ent->type == "shadowsocks";
+        needMux &= dataStore->mux_concurrency > 0;
+
+        auto stream = GetStreamSettings(ent->bean.get());
+        if (stream != nullptr) {
+            if (stream->network == "grpc" || stream->network == "quic" || (stream->network == "http" && stream->security == "tls")) {
+                needMux = false;
+            }
+        }
+
+        auto mux_state = ent->bean->mux_state;
+        if (mux_state == 0) {
+            if (!dataStore->mux_default_on && !ent->bean->enable_brutal) needMux = false;
+        } else if (mux_state == 1) {
+            needMux = true;
+        } else if (mux_state == 2) {
+            needMux = false;
+        }
+
+        if (ent->type == "vless" && outbound["flow"] != "") {
+            needMux = false;
+        }
+
+        // common
+        // apply domain_strategy
+        outbound["domain_strategy"] = dataStore->routing->outbound_domain_strategy;
+        // apply mux
+        if (needMux) {
+            auto muxObj = QJsonObject{
+                {"enabled", true},
+                {"protocol", dataStore->mux_protocol},
+                {"padding", dataStore->mux_padding},
+                {"max_streams", dataStore->mux_concurrency},
+            };
+            if (ent->bean->enable_brutal) {
+                auto brutalObj = QJsonObject{
+                    {"enabled", true},
+                    {"up_mbps", ent->bean->brutal_speed},
+                    {"down_mbps", ent->bean->brutal_speed},
+                };
+                muxObj["max_connections"] = 1;
+                muxObj["brutal"] = brutalObj;
+            }
+            outbound["multiplex"] = muxObj;
+        }
+    }
+
     // SingBox
 
     void BuildConfigSingBox(const std::shared_ptr<BuildConfigStatus> &status) {
-        // Log
-        status->result->coreConfig["log"] = QJsonObject{{"level", dataStore->log_level}};
-
         // Inbounds
 
         // mixed-in
@@ -418,14 +473,6 @@ namespace NekoGui {
             if (dataStore->routing->sniffing_mode != SniffingMode::DISABLE) {
                 inboundObj["sniff"] = true;
                 inboundObj["sniff_override_destination"] = dataStore->routing->sniffing_mode == SniffingMode::FOR_DESTINATION;
-            }
-            if (dataStore->inbound_auth->NeedAuth()) {
-                inboundObj["users"] = QJsonArray{
-                    QJsonObject{
-                        {"username", dataStore->inbound_auth->username},
-                        {"password", dataStore->inbound_auth->password},
-                    },
-                };
             }
             inboundObj["domain_strategy"] = dataStore->routing->domain_strategy;
             status->inbounds += inboundObj;
@@ -440,11 +487,13 @@ namespace NekoGui {
             inboundObj["auto_route"] = true;
             inboundObj["endpoint_independent_nat"] = true;
             inboundObj["mtu"] = dataStore->vpn_mtu;
-            inboundObj["stack"] = Preset::SingBox::VpnImplementation.value(dataStore->vpn_implementation);
+            inboundObj["stack"] = dataStore->vpn_implementation;
             inboundObj["strict_route"] = dataStore->vpn_strict_route;
             inboundObj["gso"] = dataStore->enable_gso;
-            inboundObj["inet4_address"] = "172.19.0.1/28";
-            if (dataStore->vpn_ipv6) inboundObj["inet6_address"] = "fdfe:dcba:9876::1/126";
+            inboundObj["auto_redirect"] = dataStore->auto_redirect;
+            auto tunAddress = QJsonArray{"172.19.0.1/24"};
+            if (dataStore->vpn_ipv6) tunAddress += "fdfe:dcba:9876::1/96";
+            inboundObj["address"] = tunAddress;
             if (dataStore->routing->sniffing_mode != SniffingMode::DISABLE) {
                 inboundObj["sniff"] = true;
                 inboundObj["sniff_override_destination"] = dataStore->routing->sniffing_mode == SniffingMode::FOR_DESTINATION;
@@ -464,131 +513,192 @@ namespace NekoGui {
         }
 
         // Outbounds
-        auto tagProxy = BuildChain(0, status);
+        auto tagProxy = BuildChain(status->chainID, status);
         if (!status->result->error.isEmpty()) return;
 
-        // direct & bypass & block
+        // direct & block & dns-out
         status->outbounds += QJsonObject{
             {"type", "direct"},
             {"tag", "direct"},
         };
         status->outbounds += QJsonObject{
-            {"type", "direct"},
-            {"tag", "bypass"},
-        };
-        status->outbounds += QJsonObject{
             {"type", "block"},
             {"tag", "block"},
         };
-        if (!status->forTest) {
-            status->outbounds += QJsonObject{
-                {"type", "dns"},
-                {"tag", "dns-out"},
-            };
+        status->outbounds += QJsonObject{
+            {"type", "dns"},
+            {"tag", "dns-out"},
+        };
+
+        if (dataStore->enable_redirect && !status->forTest) {
+            status->inbounds.prepend(QJsonObject{
+                {"tag", "hijack"},
+                {"type", "direct"},
+                {"listen", dataStore->redirect_listen_address},
+                {"listen_port", dataStore->redirect_listen_port},
+                {"sniff", true},
+                {"sniff_override_destination", true},
+            });
         }
 
         // custom inbound
         if (!status->forTest) QJSONARRAY_ADD(status->inbounds, QString2QJsonObject(dataStore->custom_inbound)["inbounds"].toArray())
 
-        status->result->coreConfig.insert("inbounds", status->inbounds);
-        status->result->coreConfig.insert("outbounds", status->outbounds);
+        // Routing
+        // geopath
+        if (NeedGeoAssets()) {
+            status->result->error = "Geo Assets are missing, please download them through Basic Settings -> Assets";
+            return;
+        }
 
+        // manage routing section
+        auto routeObj = QJsonObject();
+        if (dataStore->spmode_vpn) {
+            routeObj["auto_detect_interface"] = true;
+        }
+        if (!status->forTest) routeObj["final"] = dataStore->routing->def_outbound;
 
-        // sing-box common rule object
-        auto make_rule = [&](const QStringList &list, bool isIP = false) {
-            QJsonObject rule;
-            //
-            QJsonArray ip_cidr;
-            QJsonArray geoip;
-            //
-            QJsonArray domain_keyword;
-            QJsonArray domain_subdomain;
-            QJsonArray domain_regexp;
-            QJsonArray domain_full;
-            QJsonArray geosite;
-            for (auto item: list) {
-                if (isIP) {
-                    if (item.startsWith("geoip:")) {
-                        geoip += item.replace("geoip:", "");
-                    } else {
-                        ip_cidr += item;
-                    }
-                } else {
-                    // https://www.v2fly.org/config/dns.html#dnsobject
-                    if (item.startsWith("geosite:")) {
-                        geosite += item.replace("geosite:", "");
-                    } else if (item.startsWith("full:")) {
-                        domain_full += item.replace("full:", "").toLower();
-                    } else if (item.startsWith("domain:")) {
-                        domain_subdomain += item.replace("domain:", "").toLower();
-                    } else if (item.startsWith("regexp:")) {
-                        domain_regexp += item.replace("regexp:", "").toLower();
-                    } else if (item.startsWith("keyword:")) {
-                        domain_keyword += item.replace("keyword:", "").toLower();
-                    } else {
-                        domain_full += item.toLower();
-                    }
-                }
+        auto routeChain = NekoGui::profileManager->GetRouteChain(NekoGui::dataStore->routing->current_route_id);
+        if (routeChain == nullptr) {
+            status->result->error = "Routing profile does not exist, try resetting the route profile in Routing Settings";
+            return;
+        }
+        auto neededOutbounds = routeChain->get_used_outbounds();
+        auto neededRuleSets = routeChain->get_used_rule_sets();
+        std::map<int, QString> outboundMap;
+        outboundMap[-1] = "proxy";
+        outboundMap[-2] = "direct";
+        outboundMap[-3] = "block";
+        outboundMap[-4] = "dns-out";
+        int suffix = 0;
+        for (const auto &item: *neededOutbounds) {
+            if (item < 0) continue;
+            auto neededEnt = NekoGui::profileManager->GetProfile(item);
+            if (neededEnt == nullptr) {
+                status->result->error = "The routing profile is referencing outbounds that no longer exists, consider revising your settings";
+                return;
             }
-            if (isIP) {
-                if (ip_cidr.isEmpty() && geoip.isEmpty()) return rule;
-                rule["ip_cidr"] = ip_cidr;
-                rule["geoip"] = geoip;
-            } else {
-                if (domain_keyword.isEmpty() && domain_subdomain.isEmpty() && domain_regexp.isEmpty() && domain_full.isEmpty() && geosite.isEmpty()) {
-                    return rule;
-                }
-                rule["domain"] = domain_full;
-                rule["domain_suffix"] = domain_subdomain; // v2ray Subdomain => sing-box suffix
-                rule["domain_keyword"] = domain_keyword;
-                rule["domain_regex"] = domain_regexp;
-                rule["geosite"] = geosite;
-            }
-            return rule;
-        };
+            QJsonObject currOutbound;
+            QString tag = "rout-" + Int2String(suffix++);
+            BuildOutbound(neededEnt, status, currOutbound, tag);
+            status->outbounds += currOutbound;
+            outboundMap[item] = tag;
 
+            // add to dns direct resolve
+            if (!IsIpAddress(neededEnt->bean->serverAddress)) {
+                status->domainListDNSDirect << neededEnt->bean->serverAddress;
+            }
+        }
+        auto routeRules = routeChain->get_route_rules(false, outboundMap);
+        if (dataStore->enable_dns_server) routeRules.prepend(QJsonObject{
+            {"inbound", "dns-in"},
+            {"outbound", "dns-out"}
+        });
+        routeObj["rules"] = routeRules;
+
+        bool needHijackRules = false;
+        QJsonArray hijackDomains;
+        QJsonArray hijackDomainSuffix;
+        QJsonArray hijackDomainRegex;
+        QJsonArray hijackGeoAssets;
+
+        if (dataStore->enable_dns_server && !status->forTest) {
+            for (const auto& rule : dataStore->dns_server_rules) {
+                if (rule.startsWith("ruleset:")) {
+                    hijackGeoAssets << rule.mid(8);
+                }
+                if (rule.startsWith("domain:")) {
+                    hijackDomains << rule.mid(7);
+                }
+                if (rule.startsWith("suffix:")) {
+                    hijackDomainSuffix << rule.mid(7);
+                }
+                if (rule.startsWith("regex:")) {
+                    hijackDomainRegex << rule.mid(6);
+                }
+                needHijackRules = true;
+            }
+        }
+        for (auto ruleSet : hijackGeoAssets) {
+            if (!neededRuleSets->contains(ruleSet.toString())) neededRuleSets->append(ruleSet.toString());
+        }
+
+        auto ruleSetArray = QJsonArray();
+        for (const auto &item: *neededRuleSets) {
+            ruleSetArray += QJsonObject{
+                {"type", "local"},
+                {"tag", item},
+                {"format", "binary"},
+                {"path", RULE_SETS_DIR + QString("/%1.srs").arg(item)},
+            };
+            if (QFile(QString(RULE_SETS_DIR + "/%1.srs").arg(item)).exists()) continue;
+            bool ok;
+            auto err = NekoGui_rpc::defaultClient->CompileGeoSet(&ok, item.contains("_IP") ? NekoGui_rpc::GeoRuleSetType::ip : NekoGui_rpc::GeoRuleSetType::site, item.toStdString(), GetBasePath());
+            if (!ok) {
+                MW_show_log("Failed to generate rule set asset for " + item);
+                status->result->error = err;
+                return;
+            }
+        }
+        routeObj["rule_set"] = ruleSetArray;
+
+        // DNS settings
         // final add DNS
         QJsonObject dns;
         QJsonArray dnsServers;
         QJsonArray dnsRules;
 
         // Remote
-        if (!status->forTest)
-            dnsServers += QJsonObject{
-                {"tag", "dns-remote"},
-                {"address_resolver", "dns-local"},
-                {"strategy", dataStore->routing->remote_dns_strategy},
-                {"address", dataStore->routing->remote_dns},
-                {"detour", tagProxy},
-            };
+        dnsServers += QJsonObject{
+            {"tag", "dns-remote"},
+            {"address_resolver", "dns-local"},
+            {"strategy", dataStore->routing->remote_dns_strategy},
+            {"address", dataStore->routing->remote_dns},
+            {"detour", tagProxy},
+        };
 
         // Direct
         auto directDNSAddress = dataStore->routing->direct_dns;
         if (directDNSAddress == "localhost") directDNSAddress = BOX_UNDERLYING_DNS_EXPORT;
-        if (!status->forTest) {
-            QJsonObject directObj{
-                {"tag", "dns-direct"},
-                {"address_resolver", "dns-local"},
-                {"strategy", dataStore->routing->direct_dns_strategy},
-                {"address", directDNSAddress.replace("+local://", "://")},
-                {"detour", "direct"},
-            };
-            if (dataStore->routing->dns_final_out == "bypass") {
-                dnsServers.prepend(directObj);
-            } else {
-                dnsServers.append(directObj);
-            }
+        QJsonObject directObj{
+            {"tag", "dns-direct"},
+            {"address_resolver", "dns-local"},
+            {"strategy", dataStore->routing->direct_dns_strategy},
+            {"address", directDNSAddress},
+            {"detour", "direct"},
+        };
+        if (dataStore->routing->dns_final_out == "direct") {
+            dnsServers.prepend(directObj);
+        } else {
+            dnsServers.append(directObj);
         }
 
         // block
-        if (!status->forTest)
-            dnsServers += QJsonObject{
-                {"tag", "dns-block"},
-                {"address", "rcode://success"},
+        dnsServers += QJsonObject{
+            {"tag", "dns-block"},
+            {"address", "rcode://success"},
+        };
+
+        // Hijack
+        if (dataStore->enable_dns_server && !status->forTest) {
+            dnsServers += QJsonObject {
+                {"tag", "dns-hijack"},
+                {"address", "hijack://10.10.10.10"},
+                {"inet4_response", dataStore->dns_v4_resp},
+                {"inet6_response", dataStore->dns_v6_resp},
             };
 
+            status->inbounds.prepend(QJsonObject{
+                {"tag", "dns-in"},
+                {"type", "direct"},
+                {"listen", dataStore->dns_server_listen_addr},
+                {"listen_port", dataStore->dns_server_listen_port},
+                {"sniff", true},
+            });
+        }
+
         // Fakedns
-        if (dataStore->fake_dns && dataStore->spmode_vpn && !status->forTest) {
+        if (dataStore->fake_dns) {
             dnsServers += QJsonObject{
                 {"tag", "dns-fake"},
                 {"address", "fakeip"},
@@ -597,6 +707,73 @@ namespace NekoGui {
                 {"enabled", true},
                 {"inet4_range", "198.18.0.0/15"},
                 {"inet6_range", "fc00::/18"},
+            };
+            dnsRules += QJsonObject{
+                {"outbound", "any"},
+                {"server", "dns-local"},
+            };
+            dnsRules += QJsonObject{
+                {"query_type", QJsonArray{
+                                   "A",
+                                   "AAAA"
+                               }},
+                {"server", "dns-fake"}
+            };
+            dns["independent_cache"] = true;
+        }
+
+        // Direct dns domains
+        bool needDirectDnsRules = false;
+        QJsonArray directDnsDomains;
+        QJsonArray directDnsRuleSets;
+        QJsonArray directDnsSuffixes;
+        QJsonArray directDnsKeywords;
+        QJsonArray directDnsRegexes;
+
+        // server addresses
+        for (const auto &item: status->domainListDNSDirect) {
+            directDnsDomains.append(item);
+            needDirectDnsRules = true;
+        }
+
+        auto sets = routeChain->get_direct_sites();
+        for (const auto &item: sets) {
+            if (item.startsWith("ruleset:")) {
+                directDnsRuleSets << item.mid(8);
+            }
+            if (item.startsWith("domain:")) {
+                directDnsDomains << item.mid(7);
+            }
+            if (item.startsWith("suffix:")) {
+                directDnsSuffixes << item.mid(7);
+            }
+            if (item.startsWith("keyword:")) {
+                directDnsKeywords << item.mid(8);
+            }
+            if (item.startsWith("regex:")) {
+                directDnsRegexes << item.mid(6);
+            }
+            needDirectDnsRules = true;
+        }
+        if (needDirectDnsRules) {
+            dnsRules += QJsonObject{
+                {"rule_set", directDnsRuleSets},
+                {"domain", directDnsDomains},
+                {"domain_suffix", directDnsSuffixes},
+                {"domain_keyword", directDnsKeywords},
+                {"domain_regex", directDnsRegexes},
+                {"server", "dns-direct"},
+            };
+        }
+
+        // dns hijack rules
+        if (needHijackRules) {
+            dnsRules += QJsonObject{
+                    {"rule_set", hijackGeoAssets},
+                    {"domain", hijackDomains},
+                    {"domain_suffix", hijackDomainSuffix},
+                    {"domain_regex", hijackDomainRegex},
+                    {"server", "dns-hijack"},
             };
         }
 
@@ -607,150 +784,30 @@ namespace NekoGui {
             {"detour", "direct"},
         };
 
-        // sing-box dns rule object
-        auto add_rule_dns = [&](const QStringList &list, const QString &server) {
-            auto rule = make_rule(list, false);
-            if (rule.isEmpty()) return;
-            rule["server"] = server;
-            dnsRules += rule;
-        };
-        add_rule_dns(status->domainListDNSRemote, "dns-remote");
-        add_rule_dns(status->domainListDNSDirect, "dns-direct");
-
-        // built-in rules
-        if (!status->forTest) {
-            dnsRules += QJsonObject{
-                {"query_type", QJsonArray{32, 33}},
-                {"server", "dns-block"},
-            };
-            dnsRules += QJsonObject{
-                {"domain_suffix", ".lan"},
-                {"server", "dns-block"},
-            };
-        }
-
-        // fakedns rule
-        if (dataStore->fake_dns && dataStore->spmode_vpn && !status->forTest) {
-            dnsRules += QJsonObject{
-                {"inbound", "tun-in"},
-                {"server", "dns-fake"},
-            };
-        }
-
         dns["servers"] = dnsServers;
         dns["rules"] = dnsRules;
-        dns["independent_cache"] = true;
 
         if (dataStore->routing->use_dns_object) {
             dns = QString2QJsonObject(dataStore->routing->dns_object);
         }
-        status->result->coreConfig.insert("dns", dns);
-
-        // Routing
-
-        // dns hijack
-        if (!status->forTest) {
-            status->routingRules += QJsonObject{
-                {"protocol", "dns"},
-                {"outbound", "dns-out"},
-            };
-        }
-
-        // sing-box routing rule object
-        auto add_rule_route = [&](const QStringList &list, bool isIP, const QString &out) {
-            auto rule = make_rule(list, isIP);
-            if (rule.isEmpty()) return;
-            rule["outbound"] = out;
-            status->routingRules += rule;
-        };
-
-        // final add user rule
-        add_rule_route(status->domainListBlock, false, "block");
-        add_rule_route(status->domainListRemote, false, tagProxy);
-        add_rule_route(status->domainListDirect, false, "bypass");
-        add_rule_route(status->ipListBlock, true, "block");
-        add_rule_route(status->ipListRemote, true, tagProxy);
-        add_rule_route(status->ipListDirect, true, "bypass");
-
-        // built-in rules
-        status->routingRules += QJsonObject{
-            {"ip_cidr", QJsonArray{"224.0.0.0/3", "ff00::/8"}},
-            {"outbound", "block"},
-        };
-        status->routingRules += QJsonObject{
-            {"source_ip_cidr", QJsonArray{"224.0.0.0/3", "ff00::/8"}},
-            {"outbound", "block"},
-        };
-
-        // tun user rule
-        if (dataStore->spmode_vpn && !status->forTest) {
-            auto match_out = dataStore->vpn_rule_white ? "proxy" : "bypass";
-
-            QString process_name_rule = dataStore->vpn_rule_process.trimmed();
-            if (!process_name_rule.isEmpty()) {
-                auto arr = SplitLinesSkipSharp(process_name_rule);
-                QJsonObject rule{{"outbound", match_out},
-                                 {"process_name", QList2QJsonArray(arr)}};
-                status->routingRules += rule;
-            }
-
-            QString cidr_rule = dataStore->vpn_rule_cidr.trimmed();
-            if (!cidr_rule.isEmpty()) {
-                auto arr = SplitLinesSkipSharp(cidr_rule);
-                QJsonObject rule{{"outbound", match_out},
-                                 {"ip_cidr", QList2QJsonArray(arr)}};
-                status->routingRules += rule;
-            }
-
-            auto autoBypassExternalProcessPaths = getAutoBypassExternalProcessPaths(status->result);
-            if (!autoBypassExternalProcessPaths.isEmpty()) {
-                QJsonObject rule{{"outbound", "bypass"},
-                                 {"process_name", QList2QJsonArray(autoBypassExternalProcessPaths)}};
-                status->routingRules += rule;
-            }
-        }
-
-        // geopath
-        auto geoip = FindCoreAsset("geoip.db");
-        auto geosite = FindCoreAsset("geosite.db");
-        if (geoip.isEmpty()) status->result->error = +"geoip.db not found";
-        if (geosite.isEmpty()) status->result->error = +"geosite.db not found";
-
-        // final add routing rule
-        auto routeObj = QJsonObject{
-            {"auto_detect_interface", true},
-            {
-                "geoip",
-                QJsonObject{
-                    {"path", geoip},
-                },
-            },
-            {
-                "geosite",
-                QJsonObject{
-                    {"path", geosite},
-                },
-            }};
-        if (!status->forTest) routeObj["final"] = dataStore->routing->def_outbound;
-        if (status->forExport) {
-            routeObj.remove("geoip");
-            routeObj.remove("geosite");
-            routeObj.remove("auto_detect_interface");
-        }
-        status->result->coreConfig.insert("route", routeObj);
 
         // experimental
         QJsonObject experimentalObj;
 
         if (!status->forTest && dataStore->core_box_clash_api > 0) {
             QJsonObject clash_api = {
-                {"external_controller", "127.0.0.1:" + Int2String(dataStore->core_box_clash_api)},
+                {"external_controller", NekoGui::dataStore->core_box_clash_listen_addr + ":" + Int2String(dataStore->core_box_clash_api)},
                 {"secret", dataStore->core_box_clash_api_secret},
                 {"external_ui", "dashboard"},
             };
             experimentalObj["clash_api"] = clash_api;
         }
 
+        status->result->coreConfig.insert("log", QJsonObject{{"level", dataStore->log_level}});
+        status->result->coreConfig.insert("dns", dns);
+        status->result->coreConfig.insert("inbounds", status->inbounds);
+        status->result->coreConfig.insert("outbounds", status->outbounds);
+        status->result->coreConfig.insert("route", routeObj);
         if (!experimentalObj.isEmpty()) status->result->coreConfig.insert("experimental", experimentalObj);
     }
 } // namespace NekoGui

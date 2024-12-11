@@ -25,8 +25,8 @@ QPixmap Icon::GetTrayIcon(Icon::TrayIconStatus status) {
 
     auto side = pixmap.width();
     auto radius = side * 0.4;
-    auto d = side * 0.3;
-    auto margin = side * 0.05;
+    auto d = side * 0.4;
+    auto margin = side * 0.04;
 
     if (status == TrayIconStatus::RUNNING) {
         p.setBrush(QBrush(Qt::darkGreen));
@@ -34,6 +34,8 @@ QPixmap Icon::GetTrayIcon(Icon::TrayIconStatus status) {
         p.setBrush(QBrush(Qt::blue));
     } else if (status == TrayIconStatus::VPN) {
         p.setBrush(QBrush(Qt::red));
+    } else if (status == TrayIconStatus::DNS) {
+        p.setBrush(QBrush(Qt::darkMagenta));
     }
     p.drawRoundedRect(
         QRect(side - d - margin,

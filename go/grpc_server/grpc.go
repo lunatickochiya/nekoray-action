@@ -91,13 +91,12 @@ func RunCore(setupCore func(), server gen.LibcoreServiceServer) {
 	s := grpc.NewServer(
 		grpc.StreamInterceptor(grpc_auth.StreamServerInterceptor(auther.Authenticate)),
 		grpc.UnaryInterceptor(grpc_auth.UnaryServerInterceptor(auther.Authenticate)),
+		grpc.MaxRecvMsgSize(1024*1024*1024), // 1 gigaByte
+		grpc.MaxSendMsgSize(1024*1024*1024), // 1 gigaByte
 	)
 	gen.RegisterLibcoreServiceServer(s, server)
 
-	name := "nekoray_core"
-	if neko_common.RunMode == neko_common.RunMode_NekoBox_Core {
-		name = "nekobox_core"
-	}
+	name := "Core"
 
 	log.Printf("%s grpc server listening at %v\n", name, lis.Addr())
 	if err := s.Serve(lis); err != nil {

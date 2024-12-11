@@ -6,14 +6,12 @@
 #include "db/traffic/TrafficLooper.hpp"
 #include "rpc/gRPC.h"
 #include "ui/widget/MessageBoxTimer.h"
+#include "3rdparty/qv2ray/v2/proxy/QvProxyConfigurator.hpp"
 
-#include <QTimer>
-#include <QThread>
 #include <QInputDialog>
 #include <QPushButton>
 #include <QDesktopServices>
 #include <QMessageBox>
-#include <QDialogButtonBox>
 
 // ext core
 
@@ -49,213 +47,152 @@ void MainWindow::setup_grpc() {
     runOnNewThread([=] { NekoGui_traffic::trafficLooper->Loop(); });
 }
 
-// 测速
-
-inline bool speedtesting = false;
-inline QList<QThread *> speedtesting_threads = {};
-
-void MainWindow::speedtest_current_group(int mode) {
-    auto profiles = get_selected_or_group();
-    if (profiles.isEmpty()) return;
-    auto group = NekoGui::profileManager->CurrentGroup();
-    if (group->archive) return;
-
-    // menu_stop_testing
-    if (mode == 114514) {
-        while (!speedtesting_threads.isEmpty()) {
-            auto t = speedtesting_threads.takeFirst();
-            if (t != nullptr) t->exit();
-        }
-        speedtesting = false;
+void MainWindow::RunSpeedTest(const QString& config, bool useDefault, const QStringList& outboundTags, const QMap<QString, int>& tag2entID, int entID) {
+    if (stopSpeedtest.load()) {
+        MW_show_log("Profile test aborted");
         return;
     }
 
-    if (speedtesting) {
+    std::list<std::shared_ptr<NekoGui_sys::ExternalProcess>> extCs;
+    QSemaphore extSem;
+
+    libcore::TestReq req;
+    for (const auto &item: outboundTags) {
+        req.add_outbound_tags(item.toStdString());
+    }
+    req.set_config(config.toStdString());
+    req.set_url(NekoGui::dataStore->test_latency_url.toStdString());
+    req.set_use_default_outbound(useDefault);
+    req.set_max_concurrency(NekoGui::dataStore->test_concurrent);
+
+    bool rpcOK;
+    auto result = defaultClient->Test(&rpcOK, req);
+    //
+    if (!extCs.empty()) {
+        runOnUiThread(
+            [&] {
+                for (const auto &extC: extCs) {
+                    extC->Kill();
+                }
+                extSem.release();
+            },
+            DS_cores);
+        extSem.acquire();
+    }
+    //
+    if (!rpcOK) return;
+
+    for (const auto &res: result.results()) {
+        if (!tag2entID.empty()) {
+            entID = tag2entID.count(QString(res.outbound_tag().c_str())) == 0 ? -1 : tag2entID[QString(res.outbound_tag().c_str())];
+        }
+        if (entID == -1) {
+            MW_show_log("Something is very wrong, the subject ent cannot be found!");
+            continue;
+        }
+
+        auto ent = NekoGui::profileManager->GetProfile(entID);
+        if (ent == nullptr) {
+            MW_show_log("Profile manager data is corrupted, try again.");
+            continue;
+        }
+
+        if (res.error().empty()) {
+            ent->latency = res.latency_ms();
+        } else {
+            if (QString(res.error().c_str()).contains("test aborted") ||
+                QString(res.error().c_str()).contains("context canceled")) ent->latency=0;
+            else {
+                ent->latency = -1;
+                MW_show_log(tr("[%1] test error: %2").arg(ent->bean->DisplayTypeAndName(), res.error().c_str()));
+            }
+        }
+        ent->Save();
+    }
+}
+
+void MainWindow::speedtest_current_group(const QList<std::shared_ptr<NekoGui::ProxyEntity>>& profiles) {
+    if (profiles.isEmpty()) {
+        return;
+    }
+    if (!speedtestRunning.tryLock()) {
         MessageBoxWarning(software_name, "The last speed test did not exit completely, please wait. If it persists, please restart the program.");
         return;
     }
 
-    QStringList full_test_flags;
-    if (mode == libcore::FullTest) {
-        auto w = new QDialog(this);
-        auto layout = new QVBoxLayout(w);
-        w->setWindowTitle(tr("Test Options"));
-        //
-        auto l1 = new QCheckBox(tr("Latency"));
-        auto l2 = new QCheckBox(tr("UDP latency"));
-        auto l3 = new QCheckBox(tr("Download speed"));
-        auto l4 = new QCheckBox(tr("In and Out IP"));
-        //
-        auto box = new QDialogButtonBox;
-        box->setOrientation(Qt::Horizontal);
-        box->setStandardButtons(QDialogButtonBox::Cancel | QDialogButtonBox::Ok);
-        connect(box, &QDialogButtonBox::accepted, w, &QDialog::accept);
-        connect(box, &QDialogButtonBox::rejected, w, &QDialog::reject);
-        //
-        layout->addWidget(l1);
-        layout->addWidget(l2);
-        layout->addWidget(l3);
-        layout->addWidget(l4);
-        layout->addWidget(box);
-        if (w->exec() != QDialog::Accepted) {
-            w->deleteLater();
+    runOnNewThread([this, profiles]() {
+        auto buildObject = NekoGui::BuildTestConfig(profiles);
+        if (!buildObject->error.isEmpty()) {
+            MW_show_log("Failed to build test config: " + buildObject->error);
+            speedtestRunning.unlock();
             return;
         }
-        //
-        if (l1->isChecked()) full_test_flags << "1";
-        if (l2->isChecked()) full_test_flags << "2";
-        if (l3->isChecked()) full_test_flags << "3";
-        if (l4->isChecked()) full_test_flags << "4";
-        //
-        w->deleteLater();
-        if (full_test_flags.isEmpty()) return;
-    }
-    speedtesting = true;
 
-    runOnNewThread([this, profiles, mode, full_test_flags]() {
-        QMutex lock_write;
-        QMutex lock_return;
-        int threadN = NekoGui::dataStore->test_concurrent;
-        int threadN_finished = 0;
-        auto profiles_test = profiles; // copy
-
-        // Threads
-        lock_return.lock();
-        for (int i = 0; i < threadN; i++) {
-            runOnNewThread([&] {
-                speedtesting_threads << QObject::thread();
-
-                forever {
-                    //
-                    lock_write.lock();
-                    if (profiles_test.isEmpty()) {
-                        threadN_finished++;
-                        if (threadN == threadN_finished) {
-                            // quit control thread
-                            lock_return.unlock();
-                        }
-                        lock_write.unlock();
-                        // quit of this thread
-                        speedtesting_threads.removeAll(QObject::thread());
-                        return;
-                    }
-                    auto profile = profiles_test.takeFirst();
-                    lock_write.unlock();
-
-                    //
-                    libcore::TestReq req;
-                    req.set_mode((libcore::TestMode) mode);
-                    req.set_timeout(3000);
-                    req.set_url(NekoGui::dataStore->test_latency_url.toStdString());
-
-                    //
-                    std::list<std::shared_ptr<NekoGui_sys::ExternalProcess>> extCs;
-                    QSemaphore extSem;
-
-                    if (mode == libcore::TestMode::UrlTest || mode == libcore::FullTest) {
-                        auto c = BuildConfig(profile, true, false);
-                        if (!c->error.isEmpty()) {
-                            profile->full_test_report = c->error;
-                            profile->Save();
-                            auto profileId = profile->id;
-                            runOnUiThread([this, profileId] {
-                                refresh_proxy_list(profileId);
-                            });
-                            continue;
-                        }
-                        //
-                        if (!c->extRs.empty()) {
-                            runOnUiThread(
-                                [&] {
-                                    extCs = CreateExtCFromExtR(c->extRs, true);
-                                    QThread::msleep(500);
-                                    extSem.release();
-                                },
-                                DS_cores);
-                            extSem.acquire();
-                        }
-                        //
-                        auto config = new libcore::LoadConfigReq;
-                        config->set_core_config(QJsonObject2QString(c->coreConfig, true).toStdString());
-                        req.set_allocated_config(config);
-                        req.set_in_address(profile->bean->serverAddress.toStdString());
-
-                        req.set_full_latency(full_test_flags.contains("1"));
-                        req.set_full_udp_latency(full_test_flags.contains("2"));
-                        req.set_full_speed(full_test_flags.contains("3"));
-                        req.set_full_in_out(full_test_flags.contains("4"));
-
-                        req.set_full_speed_url(NekoGui::dataStore->test_download_url.toStdString());
-                        req.set_full_speed_timeout(NekoGui::dataStore->test_download_timeout);
-                    } else if (mode == libcore::TcpPing) {
-                        req.set_address(profile->bean->DisplayAddress().toStdString());
-                    }
-
-                    bool rpcOK;
-                    auto result = defaultClient->Test(&rpcOK, req);
-                    //
-                    if (!extCs.empty()) {
-                        runOnUiThread(
-                            [&] {
-                                for (const auto &extC: extCs) {
-                                    extC->Kill();
-                                }
-                                extSem.release();
-                            },
-                            DS_cores);
-                        extSem.acquire();
-                    }
-                    //
-                    if (!rpcOK) return;
-
-                    if (result.error().empty()) {
-                        profile->latency = result.ms();
-                        if (profile->latency == 0) profile->latency = 1; // nekoray use 0 to represents not tested
-                    } else {
-                        profile->latency = -1;
-                    }
-                    profile->full_test_report = result.full_report().c_str(); // higher priority
-                    profile->Save();
-
-                    if (!result.error().empty()) {
-                        MW_show_log(tr("[%1] test error: %2").arg(profile->bean->DisplayTypeAndName(), result.error().c_str()));
-                    }
-
-                    auto profileId = profile->id;
-                    runOnUiThread([this, profileId] {
-                        refresh_proxy_list(profileId);
-                    });
+        std::atomic<int> counter(0);
+        stopSpeedtest.store(false);
+        auto testCount = buildObject->fullConfigs.size() + (!buildObject->outboundTags.empty());
+        for (const auto &entID: buildObject->fullConfigs.keys()) {
+            auto configStr = buildObject->fullConfigs[entID];
+            auto func = [this, &counter, testCount, configStr, entID]() {
+                MainWindow::RunSpeedTest(configStr, true, {}, {}, entID);
+                counter++;
+                if (counter.load() == testCount) {
+                    speedtestRunning.unlock();
                 }
-            });
+            };
+            speedTestThreadPool->start(func);
         }
 
-        // Control
-        lock_return.lock();
-        lock_return.unlock();
-        speedtesting = false;
+        if (!buildObject->outboundTags.empty()) {
+            auto func = [this, &buildObject, &counter, testCount]() {
+                MainWindow::RunSpeedTest(QJsonObject2QString(buildObject->coreConfig, false), false, buildObject->outboundTags, buildObject->tag2entID);
+                counter++;
+                if (counter.load() == testCount) {
+                    speedtestRunning.unlock();
+                }
+            };
+            speedTestThreadPool->start(func);
+        }
+        if (testCount == 0) speedtestRunning.unlock();
+
+        speedtestRunning.lock();
+        speedtestRunning.unlock();
+        runOnUiThread([=]{
+            refresh_proxy_list();
+            MW_show_log("Speedtest finished!");
+        });
     });
 }
 
-void MainWindow::speedtest_current() {
+void MainWindow::stopSpeedTests() {
+    stopSpeedtest.store(true);
+    bool ok;
+    defaultClient->StopTests(&ok);
+
+    if (!ok) {
+        MW_show_log("Failed to stop tests");
+    }
+}
+
+void MainWindow::url_test_current() {
     last_test_time = QTime::currentTime();
     ui->label_running->setText(tr("Testing"));
 
     runOnNewThread([=] {
         libcore::TestReq req;
-        req.set_mode(libcore::UrlTest);
-        req.set_timeout(3000);
+        req.set_test_current(true);
         req.set_url(NekoGui::dataStore->test_latency_url.toStdString());
 
         bool rpcOK;
         auto result = defaultClient->Test(&rpcOK, req);
         if (!rpcOK) return;
 
-        auto latency = result.ms();
+        auto latency = result.results()[0].latency_ms();
         last_test_time = QTime::currentTime();
 
         runOnUiThread([=] {
-            if (!result.error().empty()) {
-                MW_show_log(QString("UrlTest error: %1").arg(result.error().c_str()));
+            if (!result.results()[0].error().empty()) {
+                MW_show_log(QString("UrlTest error: %1").arg(result.results()[0].error().c_str()));
             }
             if (latency <= 0) {
                 ui->label_running->setText(tr("Test Result") + ": " + tr("Unavailable"));
@@ -270,8 +207,56 @@ void MainWindow::stop_core_daemon() {
     NekoGui_rpc::defaultClient->Exit();
 }
 
+bool MainWindow::set_system_dns(bool set, bool save_set) {
+    if (!NekoGui::dataStore->enable_dns_server) {
+        MW_show_log("You need to enable hijack DNS server first");
+        return false;
+    }
+    if (!get_elevated_permissions(4)) {
+        return false;
+    }
+    bool rpcOK;
+    QStringList servers;
+    bool is_dhcp = false;
+    QString res;
+    if (set) {
+        bool ok;
+        auto sysDefaults = defaultClient->GetSystemDNS(&ok);
+        if (!ok) {
+            MW_show_log("Failed to get system dns settings");
+            return false;
+        }
+        QStringList sysDefServers;
+        for (const auto& server : sysDefaults.servers()) {
+            sysDefServers.append(server.c_str());
+        }
+        NekoGui::dataStore->system_dns_servers = sysDefServers;
+        NekoGui::dataStore->is_dhcp = sysDefaults.is_dhcp();
+        servers = {NekoGui::dataStore->dns_server_listen_addr};
+        res = defaultClient->SetSystemDNS(&rpcOK, servers, is_dhcp, false);
+    } else {
+        servers = NekoGui::dataStore->system_dns_servers;
+        is_dhcp = NekoGui::dataStore->is_dhcp;
+        res = defaultClient->SetSystemDNS(&rpcOK, servers, is_dhcp, true);
+    }
+    if (!rpcOK) {
+        MW_show_log("Failed to set system dns: " + res);
+        return false;
+    }
+    if (save_set) NekoGui::dataStore->system_dns_set = set;
+    return true;
+}
+
 void MainWindow::neko_start(int _id) {
     if (NekoGui::dataStore->prepare_exit) return;
+#ifdef Q_OS_LINUX
+    if (NekoGui::dataStore->enable_dns_server && NekoGui::dataStore->dns_server_listen_port <= 1024) {
+        if (!get_elevated_permissions()) {
+            MW_show_log(QString("Failed to get admin access, cannot listen on port %1 without it").arg(NekoGui::dataStore->dns_server_listen_port));
+            return;
+        }
+    }
+#endif
 
     auto ents = get_now_selected_list();
     auto ent = (_id < 0 && !ents.isEmpty()) ? ents.first() : NekoGui::profileManager->GetProfile(_id);
@@ -299,15 +284,28 @@ void MainWindow::neko_start(int _id) {
         req.set_disable_stats(NekoGui::dataStore->disable_traffic_stats);
         if (NekoGui::dataStore->traffic_loop_interval > 0) {
             req.add_stats_outbounds("proxy");
-            req.add_stats_outbounds("bypass");
+            req.add_stats_outbounds("direct");
         }
         //
         bool rpcOK;
         QString error = defaultClient->Start(&rpcOK, req);
-        if (rpcOK && !error.isEmpty()) {
-            runOnUiThread([=] { MessageBoxWarning("LoadConfig return error", error); });
+        if (!rpcOK) {
             return false;
-        } else if (!rpcOK) {
+        }
+        if (!error.isEmpty()) {
+            if (error.contains("configure tun interface")) {
+                runOnUiThread([=] {
+                    auto r = QMessageBox::information(this, tr("Tun device misbehaving"),
+                                                      tr("If you have trouble starting VPN, you can force reset nekobox_core process here and then try starting the profile again. The error is %1").arg(error),
+                                                      tr("Reset"), tr("Cancel"), "",
+                                                      1, 1);
+                    if (r == 0) {
+                        GetMainWindow()->StopVPNProcess();
+                    }
+                });
+                return false;
+            }
+            runOnUiThread([=] { MessageBoxWarning("LoadConfig return error", error); });
             return false;
         }
         //
@@ -366,8 +364,8 @@ void MainWindow::neko_start(int _id) {
 
     runOnNewThread([=] {
         // stop current running
-        if (NekoGui::dataStore->started_id >= 0) {
-            runOnUiThread([=] { neko_stop(false, true); });
+        if (running != nullptr) {
+            runOnUiThread([=] { neko_stop(false, true, true); });
             sem_stopped.acquire();
         }
         // do start
@@ -391,36 +389,46 @@ void MainWindow::neko_start(int _id) {
     });
 }
 
-void MainWindow::neko_stop(bool crash, bool sem) {
+void MainWindow::neko_set_spmode_system_proxy(bool enable, bool save) {
+    if (enable != NekoGui::dataStore->spmode_system_proxy) {
+        if (enable) {
+            auto socks_port = NekoGui::dataStore->inbound_socks_port;
+            SetSystemProxy(socks_port, socks_port);
+        } else {
+            ClearSystemProxy();
+        }
+    }
+
+    if (save) {
+        NekoGui::dataStore->remember_spmode.removeAll("system_proxy");
+        if (enable && NekoGui::dataStore->remember_enable) {
+            NekoGui::dataStore->remember_spmode.append("system_proxy");
+        }
+        NekoGui::dataStore->Save();
+    }
+
+    NekoGui::dataStore->spmode_system_proxy = enable;
+    refresh_status();
+}
+
+void MainWindow::neko_stop(bool crash, bool sem, bool manual) {
     auto id = NekoGui::dataStore->started_id;
     if (id < 0) {
         if (sem) sem_stopped.release();
         return;
     }
 
-    auto neko_stop_stage2 = [=] {
-        runOnUiThread(
-            [=] {
-                while (!NekoGui_sys::running_ext.empty()) {
-                    auto extC = NekoGui_sys::running_ext.front();
-                    extC->Kill();
-                    NekoGui_sys::running_ext.pop_front();
-                }
-            },
-            DS_cores);
-
-#ifndef NKR_NO_GRPC
-        NekoGui_traffic::trafficLooper->loop_enabled = false;
-        NekoGui_traffic::trafficLooper->loop_mutex.lock();
-        if (NekoGui::dataStore->traffic_loop_interval != 0) {
-            NekoGui_traffic::trafficLooper->UpdateAll();
-            for (const auto &item: NekoGui_traffic::trafficLooper->items) {
-                NekoGui::profileManager->GetProfile(item->id)->Save();
-                runOnUiThread([=] { refresh_proxy_list(item->id); });
+    runOnUiThread(
+        [=] {
+            while (!NekoGui_sys::running_ext.empty()) {
+                auto extC = NekoGui_sys::running_ext.front();
+                extC->Kill();
+                NekoGui_sys::running_ext.pop_front();
             }
-        }
-        NekoGui_traffic::trafficLooper->loop_mutex.unlock();
+        },
+        DS_cores);
 
+    auto neko_stop_stage2 = [=] {
         if (!crash) {
             bool rpcOK;
             QString error = defaultClient->Stop(&rpcOK);
@@ -431,17 +439,6 @@ void MainWindow::neko_stop(bool crash, bool sem) {
                 return false;
             }
         }
-#endif
-
-        NekoGui::dataStore->UpdateStartedId(-1919);
-        NekoGui::dataStore->need_keep_vpn_off = false;
-        running = nullptr;
-
-        runOnUiThread([=] {
-            refresh_status();
-            refresh_proxy_list(id);
-        });
-
         return true;
     };
 
@@ -456,30 +453,99 @@ void MainWindow::neko_stop(bool crash, bool sem) {
     connect(restartMsgbox, &QMessageBox::accepted, this, [=] { MW_dialog_message("", "RestartProgram"); });
     auto restartMsgboxTimer = new MessageBoxTimer(this, restartMsgbox, 5000);
 
+    NekoGui_traffic::trafficLooper->loop_enabled = false;
+    NekoGui_traffic::trafficLooper->loop_mutex.lock();
+    if (NekoGui::dataStore->traffic_loop_interval != 0) {
+        NekoGui_traffic::trafficLooper->UpdateAll();
+        for (const auto &item: NekoGui_traffic::trafficLooper->items) {
+            NekoGui::profileManager->GetProfile(item->id)->Save();
+            refresh_proxy_list(item->id);
+        }
+    }
+    NekoGui_traffic::trafficLooper->loop_mutex.unlock();
+
+    restartMsgboxTimer->cancel();
+    restartMsgboxTimer->deleteLater();
+    restartMsgbox->deleteLater();
+
     runOnNewThread([=] {
         // do stop
         MW_show_log(">>>>>>>> " + tr("Stopping profile %1").arg(running->bean->DisplayTypeAndName()));
         if (!neko_stop_stage2()) {
             MW_show_log("<<<<<<<< " + tr("Failed to stop, please restart the program."));
         }
-        mu_stopping.unlock();
-        if (sem) sem_stopped.release();
-        // cancel timeout
+
+        if (manual) NekoGui::dataStore->UpdateStartedId(-1919);
+        NekoGui::dataStore->need_keep_vpn_off = false;
+        running = nullptr;
+
         runOnUiThread([=] {
-            restartMsgboxTimer->cancel();
-            restartMsgboxTimer->deleteLater();
-            restartMsgbox->deleteLater();
+            refresh_status();
+            refresh_proxy_list(id);
+
+            mu_stopping.unlock();
+            if (sem) sem_stopped.release();
         });
     });
 }
 
+bool isNewer(QString version) {
+    version = version.mid(8); // take out nekoray-
+    auto parts = version.split('.');
+    auto currentParts = QString(NKR_VERSION).split('.');
+    std::vector<int> verNums;
+    std::vector<int> currNums;
+    // add base version first
+    verNums.push_back(parts[0].toInt());
+    verNums.push_back(parts[1].toInt());
+    verNums.push_back(parts[2].split('-')[0].toInt());
+
+    currNums.push_back(currentParts[0].toInt());
+    currNums.push_back(currentParts[1].toInt());
+    currNums.push_back(currentParts[2].split('-')[0].toInt());
+
+    // base version is equal or greater, check release mode
+    int releaseMode;
+    int partialVer = 0;
+    if (parts[2].split('-').size() > 1 && parts[2].split('-')[1].toInt() == 0 /* this makes sure it is not a number*/) {
+        partialVer = parts[3].split('-')[0].toInt();
+        auto str = parts[2].split('-')[1];
+        if (str == "rc") releaseMode = 3;
+        if (str == "beta") releaseMode = 2;
+        if (str == "alpha") releaseMode = 1;
+    } else {
+        releaseMode = 4;
+    }
+    verNums.push_back(releaseMode);
+    verNums.push_back(partialVer);
+
+    int currReleaseMode;
+    int currentPartialVer = 0;
+    if (currentParts[2].split('-').size() > 1 && currentParts[2].split('-')[1].toInt() == 0 /* this makes sure it is not a number*/) {
+        currentPartialVer = currentParts[3].split('-')[0].toInt();
+        auto str = currentParts[2].split('-')[1];
+        if (str == "rc") currReleaseMode = 3;
+        if (str == "beta") currReleaseMode = 2;
+        if (str == "alpha") currReleaseMode = 1;
+    } else {
+        currReleaseMode = 4;
+    }
+    currNums.push_back(currReleaseMode);
+    currNums.push_back(currentPartialVer);
+
+    for (int i=0;i<verNums.size();i++) {
+        if (verNums[i] > currNums[i]) return true;
+        if (verNums[i] < currNums[i]) return false;
+    }
+
+    return false;
+}
+
 void MainWindow::CheckUpdate() {
     // on new thread...
-#ifndef NKR_NO_GRPC
     bool ok;
     libcore::UpdateReq request;
     request.set_action(libcore::UpdateAction::Check);
-    request.set_check_pre_release(NekoGui::dataStore->check_include_pre);
     auto response = NekoGui_rpc::defaultClient->Update(&ok, request);
     if (!ok) return;
 
@@ -491,7 +557,7 @@ void MainWindow::CheckUpdate() {
         return;
     }
 
-    if (response.release_download_url() == nullptr || QString(response.assets_name().c_str()).contains(NKR_VERSION)) {
+    if (response.release_download_url() == nullptr || !isNewer(QString(response.assets_name().c_str()))) {
         runOnUiThread([=] {
             MessageBoxInfo(QObject::tr("Update"), QObject::tr("No update"));
         });
@@ -536,5 +602,4 @@ void MainWindow::CheckUpdate() {
             QDesktopServices::openUrl(QUrl(response.release_url().c_str()));
         }
     });
-#endif
 }

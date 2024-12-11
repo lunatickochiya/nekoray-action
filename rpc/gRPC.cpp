@@ -3,18 +3,17 @@
 #include <utility>
 #include <QStringList>
 
-#ifndef NKR_NO_GRPC
-
 #include "main/NekoGui.hpp"
 
 #include <QCoreApplication>
-#include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QTimer>
 #include <QtEndian>
 #include <QThread>
 #include <QMutex>
 #include <QAbstractNetworkCache>
+
+#include <iostream>
 
 namespace QtGrpc {
     const char *GrpcAcceptEncodingHeader = "grpc-accept-encoding";
@@ -66,9 +65,7 @@ namespace QtGrpc {
             QNetworkRequest request(callUrl);
             // request.setAttribute(QNetworkRequest::CacheSaveControlAttribute, false);
             // request.setAttribute(QNetworkRequest::CacheLoadControlAttribute, QNetworkRequest::AlwaysNetwork);
-#if QT_VERSION >= QT_VERSION_CHECK(5, 11, 0)
             request.setAttribute(QNetworkRequest::Http2DirectAttribute, true);
-#endif
             request.setHeader(QNetworkRequest::ContentTypeHeader, QLatin1String{"application/grpc"});
             request.setRawHeader("Cache-Control", "no-store");
             request.setRawHeader(GrpcAcceptEncodingHeader, QByteArray{"identity,deflate,gzip"});
@@ -222,7 +219,7 @@ namespace NekoGui_rpc {
             return {reply.error().c_str()};
         } else {
             NOT_OK
-            return "";
+            return reply.error().c_str();
         }
     }
 
@@ -268,6 +265,19 @@ namespace NekoGui_rpc {
         }
     }
 
+    void Client::StopTests(bool *rpcOK) {
+        const libcore::EmptyReq req;
+        libcore::EmptyResp resp;
+
+        auto status = make_grpc_channel()->Call("StopTest", req, &resp);
+
+        if (status == QNetworkReply::NoError) {
+            *rpcOK = true;
+        } else {
+            NOT_OK
+        }
+    }
+
     libcore::UpdateResp Client::Update(bool *rpcOK, const libcore::UpdateReq &request) {
         libcore::UpdateResp reply;
         auto status = default_grpc_channel->Call("Update", request, &reply);
@@ -280,6 +290,132 @@ namespace NekoGui_rpc {
             return reply;
         }
     }
-} // namespace NekoGui_rpc
 
-#endif
+    QStringList Client::GetGeoList(bool *rpcOK, GeoRuleSetType mode, const QString& basePath) {
+        switch (mode) {
+            case GeoRuleSetType::ip: {
+                libcore::GeoListRequest req;
+                libcore::GetGeoIPListResponse resp;
+                req.set_path(basePath.toStdString());
+
+                auto status = default_grpc_channel->Call("GetGeoIPList", req, &resp);
+                if (status == QNetworkReply::NoError) {
+                    QStringList res;
+                    for (const auto & i : resp.items()) {
+                        res.append(QString::fromStdString(i));
+                    }
+                    *rpcOK = true;
+                    return res;
+                } else {
+                    NOT_OK
+                    return {};
+                }
+            }
+            case GeoRuleSetType::site: {
+                libcore::GeoListRequest req;
+                libcore::GetGeoSiteListResponse resp;
+                req.set_path(basePath.toStdString());
+
+                auto status = default_grpc_channel->Call("GetGeoSiteList", req, &resp);
+                if (status == QNetworkReply::NoError) {
+                    QStringList res;
+                    for (const auto & i : resp.items()) {
+                        res.append(QString::fromStdString(i));
+                    }
+                    *rpcOK = true;
+                    return res;
+                } else {
+                    NOT_OK
+                    return {};
+                }
+            }
+        }
+        return {};
+    }
+
+    QString Client::CompileGeoSet(bool *rpcOK, GeoRuleSetType mode, std::string category, const QString& basePath) {
+        switch (mode) {
+            case ip: {
+                libcore::CompileGeoIPToSrsRequest req;
+                libcore::EmptyResp resp;
+                req.set_item(category);
+                req.set_path(basePath.toStdString());
+
+                auto status = default_grpc_channel->Call("CompileGeoIPToSrs", req, &resp);
+                if (status == QNetworkReply::NoError) {
+                    *rpcOK = true;
+                    return "";
+                } else {
+                    NOT_OK
+                    return qt_error_string(status);
+                }
+            }
+            case site: {
+                libcore::CompileGeoSiteToSrsRequest req;
+                libcore::EmptyResp resp;
+                req.set_item(category);
+                req.set_path(basePath.toStdString());
+
+                auto status = default_grpc_channel->Call("CompileGeoSiteToSrs", req, &resp);
+                if (status == QNetworkReply::NoError) {
+                    *rpcOK = true;
+                    return "";
+                } else {
+                    NOT_OK
+                    return qt_error_string(status);
+                }
+            }
+        }
+    }
+
+    QString Client::SetSystemProxy(bool *rpcOK, bool enable) {
+        libcore::SetSystemProxyRequest req;
+        libcore::EmptyResp resp;
+        req.set_enable(enable);
+        req.set_address(QString("127.0.0.1:" + Int2String(NekoGui::dataStore->inbound_socks_port)).toStdString());
+
+        auto status = default_grpc_channel->Call("SetSystemProxy", req, &resp);
+        if (status == QNetworkReply::NoError) {
+            *rpcOK = true;
+            return "";
+        } else {
+            NOT_OK
+            return qt_error_string(status);
+        }
+    }
+
+    libcore::GetSystemDNSResponse Client::GetSystemDNS(bool *rpcOK) const {
+        libcore::EmptyReq req;
+        libcore::GetSystemDNSResponse resp;
+
+        auto status = default_grpc_channel->Call("GetSystemDNS", req, &resp);
+        if (status == QNetworkReply::NoError) {
+            *rpcOK = true;
+            return resp;
+        } else {
+            NOT_OK
+            return {};
+        }
+    }
+
+    QString Client::SetSystemDNS(bool *rpcOK, const QStringList& servers, const bool dhcp, const bool clear) const {
+        libcore::SetSystemDNSRequest req;
+        libcore::EmptyResp resp;
+
+        for (const auto& server : servers) {
+            req.add_servers(server.toStdString());
+        }
+        req.set_set_dhcp(dhcp);
+        req.set_clear(clear);
+
+        auto status = default_grpc_channel->Call("SetSystemDNS", req, &resp);
+        if (status == QNetworkReply::NoError) {
+            *rpcOK = true;
+            return "";
+        } else {
+            NOT_OK
+            return qt_error_string(status);
+        }
+    }
+
+} // namespace NekoGui_rpc

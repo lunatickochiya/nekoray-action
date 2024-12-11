@@ -1,7 +1,6 @@
 #include "db/ProfileFilter.hpp"
 #include "fmt/includes.h"
 #include "fmt/Preset.hpp"
-#include "main/QJS.hpp"
 #include "main/HTTPRequestHelper.hpp"
 
 #include "GroupUpdater.hpp"
@@ -79,6 +78,9 @@ namespace NekoGui_sub {
 
         // Clash
         if (str.contains("proxies:")) {
+            runOnUiThread([=] {
+               MessageBoxWarning("Deprecated", "Clash Meta format is deprecated and will no longer be updated.");
+            });
             updateClash(str);
             return;
         }
@@ -200,6 +202,22 @@ namespace NekoGui_sub {
             needFix = false;
             ent = NekoGui::ProfileManager::NewProxyEntity("tuic");
             auto ok = ent->QUICBean()->TryParseLink(str);
+            if (!ok) return;
+        }
+
+        // Wireguard
+        if (str.startsWith("wg://")) {
+            needFix = false;
+            ent = NekoGui::ProfileManager::NewProxyEntity("wireguard");
+            auto ok = ent->WireguardBean()->TryParseLink(str);
+            if (!ok) return;
+        }
+
+        // SSH
+        if (str.startsWith("ssh://")) {
+            needFix = false;
+            ent = NekoGui::ProfileManager::NewProxyEntity("ssh");
+            auto ok = ent->SSHBean()->TryParseLink(str);
             if (!ok) return;
         }
 
@@ -452,7 +470,6 @@ namespace NekoGui_sub {
                         }
                         bean->stream->path = Node2QString(h2["path"]);
                     }
-
                     auto tcp_http = NodeChild(proxy, {"http-opts", "http-opt"});
                     if (tcp_http.IsMap()) {
                         bean->stream->network = "tcp";
@@ -472,8 +489,6 @@ namespace NekoGui_sub {
                     }
                 } else if (type == "hysteria") {
                     auto bean = ent->QUICBean();
-
-                    bean->hopPort = Node2QString(proxy["ports"]);
 
                     bean->allowInsecure = Node2Bool(proxy["skip-cert-verify"]);
                     auto alpn = Node2QStringList(proxy["alpn"]);
@@ -503,8 +518,6 @@ namespace NekoGui_sub {
                     if (downMbps > 0) bean->downloadMbps = downMbps;
                 } else if (type == "hysteria2") {
                     auto bean = ent->QUICBean();
-
-                    bean->hopPort = Node2QString(proxy["ports"]);
 
                     bean->allowInsecure = Node2Bool(proxy["skip-cert-verify"]);
                     bean->caText = Node2QString(proxy["ca-str"]);
@@ -646,17 +659,6 @@ namespace NekoGui_sub {
                 for (const auto &profile: in) {
                     NekoGui::profileManager->DeleteProfile(profile->id);
                 }
-            }
-        }
-
-        // hook.js
-        auto source = qjs::ReadHookJS();
-        if (!source.isEmpty()) {
-            qjs::QJS js(source);
-            auto js_result = js.EvalFunction("hook.hook_import", content);
-            if (content != js_result) {
-                MW_show_log("hook.js modified your import content.");
-                content = js_result;
             }
         }
 

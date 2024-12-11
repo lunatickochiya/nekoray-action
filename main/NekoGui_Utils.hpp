@@ -83,10 +83,13 @@ QJsonObject QString2QJsonObject(const QString &jsonString);
 
 QString QJsonObject2QString(const QJsonObject &jsonObject, bool compact);
 
-template<typename T>
-QJsonArray QList2QJsonArray(const QList<T> &list);
+QJsonArray QListInt2QJsonArray(const QList<int> &list);
+
+QJsonArray QListStr2QJsonArray(const QList<QString> &list);
 
 QList<int> QJsonArray2QListInt(const QJsonArray &arr);
+
+QJsonObject QMapString2QJsonObject(const QMap<QString,QString> &mp);
 
 #define QJSONARRAY_ADD(arr, add) \
     for (const auto &a: (add)) { \
@@ -98,6 +101,8 @@ QList<int> QJsonArray2QListInt(const QJsonArray &arr);
     if (src.contains(src_key)) dst[dst_key] = src[src_key];
 
 QList<QString> QJsonArray2QListString(const QJsonArray &arr);
+
+QJsonArray QString2QJsonArray(const QString& str);
 
 // Files
 
@@ -160,6 +165,8 @@ void ActivateWindow(QWidget *w);
 void runOnUiThread(const std::function<void()> &callback, QObject *parent = nullptr);
 
 void runOnNewThread(const std::function<void()> &callback);
+
+void runOnThread(const std::function<void()> &callback, QThread *thread);
 
 template<typename EMITTER, typename SIGNAL, typename RECEIVER, typename ReceiverFunc>
 inline void connectOnce(EMITTER *emitter, SIGNAL signal, RECEIVER *receiver, ReceiverFunc f,
